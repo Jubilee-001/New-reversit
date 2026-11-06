@@ -41,3 +41,19 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+@media print {
+  header,
+  footer,
+  button,
+  [aria-label="Print"],
+  .no-print {
+    display: none !important;
+  }
+  main {
+    padding: 0 !important;
+  }
+  body {
+    background: #fff !important;
+  }
+}
