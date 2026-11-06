@@ -13,7 +13,7 @@ desktop.ini
 *.tmp
 *.bak
 
-# IDE & Editor files
+# IDE / editor files
 .idea/
 .vscode/
 *.sublime-project
@@ -21,18 +21,7 @@ desktop.ini
 *.swp
 *.swo
 
-# Go dependencies and binaries
-apps/api/bin/
-apps/api/dist/
-apps/api/tmp/
-apps/api/coverage.out
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-
-# Node / Frontend dependencies & build artifacts
+# Node / frontend dependencies and build artifacts
 node_modules/
 npm-debug.log*
 yarn-debug.log*
@@ -40,41 +29,26 @@ yarn-error.log*
 pnpm-debug.log*
 apps/web/dist/
 apps/web/dist-ssr/
-packages/ui/dist/
 *.tsbuildinfo
 
-# Python & AI service
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-apps/ai-service/env/
-apps/ai-service/build/
-apps/ai-service/develop-eggs/
-apps/ai-service/dist/
-apps/ai-service/downloads/
-apps/ai-service/eggs/
-apps/ai-service/.eggs/
-apps/ai-service/lib/
-apps/ai-service/lib64/
-apps/ai-service/parts/
-apps/ai-service/sdist/
-apps/ai-service/var/
-apps/ai-service/wheels/
-apps/ai-service/.venv/
-apps/ai-service/venv/
-apps/ai-service/ENV/
+venv/
+env/
+.venv/
 .pytest_cache/
 .coverage
 htmlcov/
 
-# Docker & local database volume data
-infra/docker/data/
+# Local database
 *.sqlite
 *.db
 
-# Test outputs & logs
+# Test outputs and logs
 tests/e2e/screenshots/
 tests/e2e/videos/
 *.log
