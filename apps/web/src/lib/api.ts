@@ -67,17 +67,17 @@ export async function postFormData(path: string, formData: FormData): Promise<un
 // ----- Endpoints -----
 
 export function parseText(text: string) {
-  return postJson<{ amount?: number; date?: string; time?: string; channel?: string; bank?: string; reference?: string; error?: string; missing?: string[] }>('/api/parse-text', { text })
+  return postJson<{ amount?: number; date?: string; time?: string; channel?: string; bank?: string; reference?: string; error?: string; missing?: string[] }>('/parse-text', { text })
 }
 
 export function extractImageText(file: File) {
   const formData = new FormData()
   formData.append('file', file)
-  return postFormData('/api/extract-image-text', formData) as Promise<{ text: string; error?: string }>
+  return postFormData('/extract-image-text', formData) as Promise<{ text: string; error?: string }>
 }
 
 export function getConfig() {
-  return getJson<Config>('/api/config')
+  return getJson<Config>('/config')
 }
 
 export function createCase(payload: {
@@ -92,37 +92,37 @@ export function createCase(payload: {
   account_last4?: string | null
   to_email?: string | null
 }) {
-  return postJson<CaseRecord>('/api/cases', payload)
+  return postJson<CaseRecord>('/cases', payload)
 }
 
 export function getCase(id: string) {
-  return getJson<CaseRecord>(`/api/cases/${encodeURIComponent(id)}`)
+  return getJson<CaseRecord>(`/cases/${encodeURIComponent(id)}`)
 }
 
 export function patchCase(id: string, patch: { complaint_text?: string; to_email?: string }) {
-  return patchJson<CaseRecord>(`/api/cases/${encodeURIComponent(id)}`, patch)
+  return patchJson<CaseRecord>(`/cases/${encodeURIComponent(id)}`, patch)
 }
 
 export function deleteCase(id: string) {
-  return delJson(`/api/cases/${encodeURIComponent(id)}`)
+  return delJson(`/cases/${encodeURIComponent(id)}`)
 }
 
 export function mailOpened(id: string) {
-  return postJson<CaseRecord>(`/api/cases/${encodeURIComponent(id)}/mail-opened`, {})
+  return postJson<CaseRecord>(`/cases/${encodeURIComponent(id)}/mail-opened`, {})
 }
 
 export function confirmSent(id: string, sentAt?: string | null) {
-  return postJson<CaseRecord>(`/api/cases/${encodeURIComponent(id)}/confirm-sent`, { sent_at: sentAt ?? null })
+  return postJson<CaseRecord>(`/cases/${encodeURIComponent(id)}/confirm-sent`, { sent_at: sentAt ?? null })
 }
 
 export function bankReply(id: string, ticket?: string | null, note?: string | null) {
-  return postJson<CaseRecord>(`/api/cases/${encodeURIComponent(id)}/bank-reply`, { ticket, note })
+  return postJson<CaseRecord>(`/cases/${encodeURIComponent(id)}/bank-reply`, { ticket, note })
 }
 
 export function resolveCase(id: string) {
-  return postJson<CaseRecord>(`/api/cases/${encodeURIComponent(id)}/resolve`, {})
+  return postJson<CaseRecord>(`/cases/${encodeURIComponent(id)}/resolve`, {})
 }
 
 export function escalateCase(id: string, tier: number) {
-  return postJson<CaseRecord>(`/api/cases/${encodeURIComponent(id)}/escalate`, { tier })
+  return postJson<CaseRecord>(`/cases/${encodeURIComponent(id)}/escalate`, { tier })
 }
