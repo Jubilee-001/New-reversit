@@ -1,0 +1,75 @@
+{
+  "last_checked": "2026-11-06",
+  "disclaimer": "Check the latest CBN circulars.",
+  "items": [
+    {
+      "key": "atm_not_dispensed_on_us",
+      "label": "ATM cash not dispensed (your bank's ATM)",
+      "problem_type": "atm_failure",
+      "window_hours": 24,
+      "verified": true,
+      "source": "CBN circular PSM/DIR/CON/CWO/07/127 dated 31 May 2020, effective 8 June 2020",
+      "note": "Instant reversal is expected. If it fails, a manual reversal is expected within 24 hours. Newer CBN ATM operating guidelines may supersede this; check the latest circulars."
+    },
+    {
+      "key": "atm_not_dispensed_not_on_us",
+      "label": "ATM cash not dispensed (another bank's ATM)",
+      "problem_type": "atm_failure",
+      "window_hours": 48,
+      "verified": true,
+      "source": "CBN circular PSM/DIR/CON/CWO/07/127 dated 31 May 2020, effective 8 June 2020",
+      "note": "Refund within 48 hours. Newer CBN ATM operating guidelines may supersede this; check the latest circulars."
+    },
+    {
+      "key": "pos_failure",
+      "label": "POS failure",
+      "problem_type": "pos_web_failure",
+      "window_hours": 72,
+      "verified": true,
+      "source": "CBN circular PSM/DIR/CON/CWO/07/127 dated 31 May 2020; CBN press release on payment channels (2020)",
+      "note": "The circular says 48 hours and a CBN press release says 72 hours. We use 72 so a bank is never called late when it may not be."
+    },
+    {
+      "key": "web_checkout_failure",
+      "label": "Web checkout failure",
+      "problem_type": "pos_web_failure",
+      "window_hours": 72,
+      "verified": true,
+      "source": "CBN circular PSM/DIR/CON/CWO/07/127 dated 31 May 2020; CBN press release on payment channels (2020)",
+      "note": "The circular says 48 hours and a CBN press release says 72 hours. We use 72 so a bank is never called late when it may not be."
+    },
+    {
+      "key": "failed_transfer",
+      "label": "Failed transfer (NIP)",
+      "problem_type": "failed_transfer",
+      "window_hours": 48,
+      "verified": false,
+      "source": "No specific CBN source found",
+      "note": "Shown as an estimate. Check the latest CBN circulars."
+    },
+    {
+      "key": "duplicate_debit",
+      "label": "Duplicate debit",
+      "problem_type": "duplicate_debit",
+      "window_hours": 72,
+      "window_by_channel": {
+        "atm": 24,
+        "pos": 72,
+        "web": 72,
+        "transfer": 48
+      },
+      "verified": false,
+      "source": "Uses the window for the payment channel; no separate CBN source found",
+      "note": "For a duplicate transfer there is no specific CBN source; shown as an estimate. For ATM, POS and web, the channel window applies."
+    },
+    {
+      "key": "wrong_account",
+      "label": "Sent to the wrong account",
+      "problem_type": "wrong_account",
+      "window_hours": null,
+      "verified": false,
+      "source": "No regulatory deadline",
+      "note": "There is no CBN deadline for a transfer sent to the wrong account. A recall request depends on the recipient and whether the money is still available."
+    }
+  ]
+}

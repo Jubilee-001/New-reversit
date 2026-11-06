@@ -1,0 +1,14 @@
+{
+  "disclaimer": "Check this address on your bank's website before sending.",
+  "items": [
+    {
+      "key": "wema",
+      "name": "Wema Bank",
+      "dispute_email": "disputes@wemabank.com",
+      "phone": "",
+      "source_url": "",
+      "verified": false,
+      "verified_on": null
+    }
+  ]
+}

@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import Base, engine
+from app.cases_api import router as cases_router
 from app.parser_api import router as parser_router
 
 
@@ -38,6 +39,7 @@ app.add_middleware(
 )
 
 app.include_router(parser_router)
+app.include_router(cases_router)
 
 
 @app.get("/")

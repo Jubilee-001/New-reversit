@@ -1,0 +1,50 @@
+{
+  "items": [
+    {
+      "tier": 1,
+      "title": "Your bank's dispute desk",
+      "when": "Use this first. Then allow the timeline for the payment channel.",
+      "verified": false,
+      "contacts": [
+        {
+          "type": "email",
+          "value": "{bank_dispute_email}",
+          "verified": false,
+          "note": "Use the address shown on the complaint page and check it on your bank's website."
+        }
+      ],
+      "message": "Subject: Follow-up on my complaint — {problem_label}\n\nDear {bank_name},\n\nI am following up on my complaint about a debit of NGN {amount} on {txn_date} at {txn_time} WAT, reference {reference}.\n\nI asked for this to be corrected within {window_hours} hours. Please confirm my ticket number and tell me the current status.\n\nThank you,\n[Your name]"
+    },
+    {
+      "tier": 2,
+      "title": "Your bank's head office complaints unit",
+      "when": "Use this if the bank has not acknowledged your complaint within 3 days, has given no ticket number, or the timeline has passed.",
+      "verified": false,
+      "contacts": [],
+      "message": "Subject: Escalation of unresolved complaint — {problem_label}\n\nDear Head of Complaints,\n\nI complained to your dispute desk about a debit of NGN {amount} on {txn_date} at {txn_time} WAT, reference {reference}.\n\nThe bank has not resolved it within the expected timeline and I do not have a resolution or ticket number. Please escalate this complaint and confirm in writing what happens next.\n\nThank you,\n[Your name]"
+    },
+    {
+      "tier": 3,
+      "title": "CBN Consumer Protection Department",
+      "when": "Use this if the bank misses its timeline or does not acknowledge your complaint. The CBN guide says to complain to the bank first and keep evidence of that. It allows up to two weeks for general complaints.",
+      "verified": false,
+      "contacts": [
+        {
+          "type": "email",
+          "value": "cpd@cbn.gov.ng",
+          "verified": true,
+          "source": "CBN complaint guide CPD/GEN/GUIDE/03, January 2022",
+          "note": ""
+        },
+        {
+          "type": "post",
+          "value": "The Director, Consumer Protection Department, Central Bank of Nigeria, Central Business District, Garki, Abuja",
+          "verified": false,
+          "source": "",
+          "note": "Check this address on the CBN's website before posting."
+        }
+      ],
+      "message": "Subject: Complaint against {bank_name} — unresolved debit\n\nDear Director, Consumer Protection Department,\n\nI complained to {bank_name} about a debit of NGN {amount} on {txn_date} at {txn_time} WAT, reference {reference}.\n\nI did not get a resolution within the bank's timeline. I have kept my complaint and the bank's replies.\n\nPlease look into this complaint.\n\nThank you,\n[Your name]"
+    }
+  ]
+}
