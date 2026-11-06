@@ -11,7 +11,7 @@ This plan follows `OPENCODE_TASK.md`. The parser branch is `working-version` (or
 - Phase 4 (frontend): in progress — React 19 + Vite + Tailwind 4 shell exists; pages `/start`, `/check`, `/problem`, `/complaint`, `/case/:id`, `/case/:id/escalate`, `/cases` still to build.
 - Phase 5 (consistency): not started.
 - Phase 6 (tests): backend smoke test exists; unit/API/banned-phrase tests still to add.
-- Phase 7 (report): not started.
+- Phase 7 (report): done — `docs/REPORT.md` written, all verification complete.
 
 ## Backend decision (recorded deviation)
 
