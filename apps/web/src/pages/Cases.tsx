@@ -52,8 +52,8 @@ export default function Cases() {
           You have no saved cases yet. Start a complaint to create one.
         </div>
       ) : (
-        <div className="mt-8">
-          <table className="w-full text-left border-collapse text-sm">
+        <div className="mt-8 overflow-x-auto">
+          <table className="w-full text-left border-collapse text-sm min-w-[600px]">
             <thead>
               <tr className="border-b border-[var(--line)]">
                 <th className="pb-3 font-medium text-[var(--ink)]">Case</th>

@@ -2,6 +2,7 @@ import * as React from 'react'
 import { Layout } from '@/components/Layout'
 import { Button } from '@/components/ui/Button'
 import { getCase } from '@/lib/api'
+import { getConfig } from '@/lib/api'
 import type { CaseRecord } from '@/lib/types'
 
 export default function CaseEscalate({ params }: { params?: { id: string } }) {
@@ -15,10 +16,11 @@ export default function CaseEscalate({ params }: { params?: { id: string } }) {
       try {
         const rec = await getCase(id)
         setRecord(rec)
-        void fetch('/api/config').then(async (r) => {
+        void getConfig().then((cfg) => {
           if (!mounted) return
-          const cfg = await r.json()
-          if (mounted) setTiers((cfg.escalation || []) as { tier: number; title: string; when: string; verified: boolean; contacts: Array<{ type: string; value: string; verified: boolean; note?: string }>; message: string }[])
+          setTiers((cfg.escalation || []) as { tier: number; title: string; when: string; verified: boolean; contacts: Array<{ type: string; value: string; verified: boolean; note?: string }>; message: string }[])
+        }).catch(() => {
+          // config fetch failed; escalation tiers will not render
         })
       } catch {
         // handled by case page links; keep minimal
