@@ -1,88 +1,38 @@
-# ==============================================================================
-# SMARTREVERSAL PLATFORM MAKEFILE
-# ==============================================================================
+.PHONY: help install dev api web build test test-api test-web lint typecheck clean
 
-.PHONY: help dev build test lint clean docker-up docker-down db-migrate db-migrate-status db-migrate-down dev-worker test-api-integration
+help: ## Show available commands
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
-help: ## Display available commands
-	@echo "SMARTREVERSAL Enterprise Financial Operations Platform"
-	@echo "======================================================="
-	@echo "Usage: make [target]"
-	@echo ""
-	@echo "Targets:"
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
+install: ## Install Python and web dependencies
+	python3 -m venv .venv
+	.venv/bin/pip install -r requirements.txt
+	npm install
 
-# ------------------------------------------------------------------------------
-# Local Development & Orchestration
-# ------------------------------------------------------------------------------
-docker-up: ## Start core infrastructure and services with Docker Compose
-	docker compose up -d
+api: ## Run the customer API on :8000
+	.venv/bin/uvicorn app.main:app --reload --port 8000
 
-docker-down: ## Stop all Docker Compose containers
-	docker compose down
+web: ## Run the customer web app on :5173
+	npm run dev:web
 
-docker-logs: ## Follow Docker Compose logs
-	docker compose logs -f
+dev: ## Reminder: run `make api` and `make web` in two terminals
+	@echo "Run 'make api' in one terminal and 'make web' in another."
 
-dev-api: ## Run the Go backend API locally
-	cd apps/api && go run ./cmd/api
+build: ## Build the web app
+	npm run build:web
 
-dev-worker: ## Run the Go background worker locally
-	cd apps/api && go run ./cmd/worker
-
-db-migrate: ## Apply database migrations (needs DB_* variables)
-	cd apps/api && go run ./cmd/migrate up
-
-db-migrate-status: ## Show migration status
-	cd apps/api && go run ./cmd/migrate status
-
-db-migrate-down: ## Revert the most recent migration
-	cd apps/api && go run ./cmd/migrate down 1
-
-dev-ai: ## Run the Python AI service locally
-	cd apps/ai-service && uvicorn app.main:app --reload --port 8000
-
-dev-web: ## Run the Vite web operations console locally
-	npm run dev --workspace=apps/web
-
-dev-all: ## Run all three tiers locally (Go API + Python AI + Vite Web)
-	node scripts/dev-all.mjs
-
-# ------------------------------------------------------------------------------
-# Build & Compilation
-# ------------------------------------------------------------------------------
-build: build-api build-web ## Build all production assets
-
-build-api: ## Compile all Go binaries into apps/api/bin
-	cd apps/api && go build -v -o bin/ ./cmd/...
-
-build-web: ## Build Vite frontend production bundle
-	npm run build --workspace=apps/web
-
-# ------------------------------------------------------------------------------
-# Quality & Verification
-# ------------------------------------------------------------------------------
-test: test-api test-ai test-web ## Run unit tests across all applications
-
-test-api: ## Run Go tests (integration tests skip unless TEST_DATABASE_URL and TEST_REDIS_ADDR are set)
-	cd apps/api && go test -v -race ./...
-
-test-api-integration: ## Run Go tests against local Postgres and Redis (see docs/backend/local-setup.md)
-	cd apps/api && go test -p 1 -race -count=1 ./...
-
-test-ai: ## Run Python AI service tests
-	cd apps/ai-service && pytest
+test-api: ## Run Python tests
+	.venv/bin/pytest
 
 test-web: ## Run web tests
-	npm run test --workspace=apps/web --if-present
+	npm run test:web --if-present
 
-lint: lint-api lint-web ## Run linters across projects
+test: test-api test-web ## Run all tests
 
-lint-api: ## Check formatting and run go vet
-	cd apps/api && test -z "$$(gofmt -l .)" && go vet ./...
+lint: ## Lint the web app
+	npm run lint --if-present
 
-lint-web: ## Run ESLint for web and UI packages
-	npm run lint --workspaces --if-present
+typecheck: ## Type-check the web app
+	npm run typecheck --if-present
 
-clean: ## Clean build artifacts and temporary files
-	rm -rf apps/api/bin apps/web/dist packages/ui/dist
+clean: ## Remove build artifacts
+	rm -rf apps/web/dist .venv __pycache__ .pytest_cache

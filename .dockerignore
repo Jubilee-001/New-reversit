@@ -15,6 +15,5 @@
 **/*.log
 **/.env
 **/.env.*
-infra/docker/data
 tests/e2e/screenshots
 tests/e2e/videos
