@@ -39,7 +39,7 @@ def new_case_id() -> str:
 
 def parse_utc(value: str) -> datetime:
     try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(value)
     except (TypeError, ValueError) as exc:
         raise TransitionError("The date and time could not be read.", "invalid_datetime") from exc
     parsed = ensure_utc(parsed)
@@ -82,9 +82,8 @@ def create_case(db: Session, data: dict) -> Case:
     except (TypeError, ValueError):
         raise TransitionError("Enter the transaction time.", "invalid_time")
 
-    if account_last4 is not None:
-        if not (len(account_last4) == 4 and account_last4.isdigit()):
-            raise TransitionError("Enter only the last 4 digits of the account.", "invalid_last4")
+    if account_last4 is not None and not (len(account_last4) == 4 and account_last4.isdigit()):
+        raise TransitionError("Enter only the last 4 digits of the account.", "invalid_last4")
 
     bank_key = (data.get("bank_key") or "").strip() or None
     bank = bank_by_key(bank_key) if bank_key else bank_by_name(bank_name)

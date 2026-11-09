@@ -12,6 +12,8 @@ import os
 import re
 import json
 import math
+import time
+from collections import deque
 from datetime import datetime
 
 from dotenv import load_dotenv
@@ -26,12 +28,26 @@ CHANNELS = ("atm", "pos", "transfer", "web")
 REQUIRED_FIELDS = ["amount", "date", "time", "channel", "bank", "reference"]
 DEFAULT_BANK = "Unknown"
 EMPTY_MARKERS = {"", "unknown", "n/a", "na", "none", "null"}
+REASON_CODES = (
+    "empty",
+    "too_long",
+    "could_not_parse",
+    "ai_unavailable",
+    "ai_busy",
+    "ai_error",
+    "no_text",
+    "invalid_file",
+    "too_large",
+    "bad_image",
+)
 
 LLM_MODEL = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
 # Qwen models may emit reasoning tokens that eat the budget and truncate the
 # JSON. Keep this comfortably above 150. Optionally set GROQ_REASONING_EFFORT
 # (e.g. "none") in .env if the model supports it.
 LLM_MAX_TOKENS = int(os.getenv("GROQ_MAX_TOKENS", "400"))
+AI_CALL_LIMIT_PER_MINUTE = int(os.getenv("GROQ_RATE_LIMIT_PER_MINUTE", "6"))
+_AI_CALL_TIMES = deque()
 
 # ---------------------------------------------------------------------
 # Normalizers (shared by regex path, LLM path and validator)
@@ -143,11 +159,25 @@ def _extract_json(content: str) -> dict | None:
     return data if isinstance(data, dict) else None
 
 
+def _ai_call_allowed() -> bool:
+    now = time.monotonic()
+    window_seconds = 60
+    while _AI_CALL_TIMES and now - _AI_CALL_TIMES[0] >= window_seconds:
+        _AI_CALL_TIMES.popleft()
+    if len(_AI_CALL_TIMES) >= AI_CALL_LIMIT_PER_MINUTE:
+        return False
+    _AI_CALL_TIMES.append(now)
+    return True
+
+
 def parse_with_llm(text: str) -> dict | None:
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         print("[Warning] GROQ_API_KEY not found in environment.")
-        return None
+        return {"_ai_error_reason": "ai_unavailable"}
+
+    if not _ai_call_allowed():
+        return {"_ai_error_reason": "ai_busy"}
 
     kwargs = {}
     effort = os.getenv("GROQ_REASONING_EFFORT")
@@ -167,10 +197,13 @@ def parse_with_llm(text: str) -> dict | None:
             response_format={"type": "json_object"},
             **kwargs,
         )
-        return _extract_json(completion.choices[0].message.content or "")
+        result = _extract_json(completion.choices[0].message.content or "")
+        if isinstance(result, dict):
+            return result
+        return {"_ai_error_reason": "ai_error"}
     except Exception as e:
         print(f"[LLM Error]: {e}")
-        return None
+        return {"_ai_error_reason": "ai_error"}
 
 
 # ---------------------------------------------------------------------
@@ -224,6 +257,83 @@ def validate_extracted_data(data) -> tuple[bool, list[str]]:
     return (len(missing) == 0), missing
 
 
+def _warning_codes(text: str) -> list[dict[str, str]]:
+    lower = text.lower()
+    warnings: list[dict[str, str]] = []
+
+    if re.search(r"\b(credit|credited|received)\b", lower) and not re.search(
+        r"\b(debit|debited|dr|withdrawal)\b",
+        lower,
+    ):
+        warnings.append({
+            "code": "credit_alert_suspected",
+            "message": "This looks like money received, not a debit.",
+        })
+
+    if len(re.findall(r"(?:ngn|₦|n\s*\d|\b\d[\d,]*(?:\.\d{1,2})?\b)", text, flags=re.IGNORECASE)) > 1:
+        warnings.append({
+            "code": "multiple_amounts",
+            "message": "Multiple amounts were found; the final value was selected from the debit line.",
+        })
+
+    refs = re.findall(r"\b(?:ref(?:erence)?|session\s*id|rrn|stan|transaction\s*id|trans\s*id)\s*[:=]?\s*([A-Za-z0-9][A-Za-z0-9\-/]*)", text, re.IGNORECASE)
+    if len(refs) > 1:
+        warnings.append({
+            "code": "multiple_references",
+            "message": f"Multiple references were present; {refs[-1]} was chosen.",
+        })
+
+    if re.search(r"\b\d{1,2}\b.*\b\d{1,2}\b", text) and re.search(r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b", text, re.IGNORECASE):
+        warnings.append({
+            "code": "ambiguous_date",
+            "message": "Multiple possible dates were found; the parser prefers the explicit debit-date text.",
+        })
+
+    if re.search(r"\b\d{1,2}:\d{2}\s*(?:am|pm)\b", lower):
+        warnings.append({
+            "code": "twelve_hour_time_converted",
+            "message": "The time was interpreted in 12-hour format and converted to 24-hour time.",
+        })
+
+    if ("pos" in lower and ("transfer" in lower or "sent to" in lower)) or ("transfer" in lower and ("pos" in lower or "payment" in lower)):
+        warnings.append({
+            "code": "channel_conflict",
+            "message": "Multiple channel hints were present; the parser resolved the strongest debit signal.",
+        })
+
+    return warnings
+
+
+def _balance_or_fee_guard(text: str, amount: object) -> bool:
+    lower = text.lower()
+    if amount is None:
+        return False
+    norm = str(amount)
+    balance_ctx = re.search(
+        r"\b(?:available\s+bal|avail\s+bal|balance|bal|fee|charge|vat|commission)\b",
+        lower,
+    )
+    amount_re = re.search(rf"(?:ngn|₦|n\s*\d|\b\d[\d,]*(?:\.\d{{1,2}})?\b)", lower)
+    if balance_ctx and amount_re and norm in lower:
+        return True
+    return False
+
+
+def _result_payload(fields: dict | None, *, source: str, warnings: list[dict[str, str]], reason: str | None = None, message: str | None = None, missing: list[str] | None = None) -> dict:
+    missing = list(missing or [])
+    payload = {
+        "ok": bool(fields and not missing),
+        "fields": fields or {},
+        "missing": missing,
+        "reason": reason,
+        "message": message,
+        "source": source,
+        "warnings": warnings,
+    }
+    if fields:
+        payload.update(fields)
+    return payload
+
 
 MAX_INPUT_CHARS = 2000  # real alerts are short; cap cost and abuse
 
@@ -262,54 +372,196 @@ def _clean(result: dict) -> dict:
     }
 
 
-def parse_alert(text: str) -> dict:
-    """regex -> (validate) -> LLM fallback -> validate + grounding -> result."""
+def parse_alert_result(text: str) -> dict:
+    """Return the richer parsing result used by the backend hardening brief.
+
+    Legacy callers still receive the original simplified dict through parse_alert().
+    """
     try:
         if not text or not isinstance(text, str) or not text.strip():
-            return {"error": "could_not_parse", "missing": ["text"]}
+            return {
+                "ok": False,
+                "fields": {},
+                "missing": ["text"],
+                "reason": "empty",
+                "message": "Input text is empty.",
+                "source": "none",
+                "warnings": _warning_codes(text or ""),
+                "error": "could_not_parse",
+            }
 
-        text = text.strip()[:MAX_INPUT_CHARS]
+        clean_text = text.strip()
+        if len(clean_text) > MAX_INPUT_CHARS:
+            return {
+                "ok": False,
+                "fields": {},
+                "missing": ["text"],
+                "reason": "too_long",
+                "message": "Input text exceeds the allowed length.",
+                "source": "none",
+                "warnings": _warning_codes(clean_text),
+                "error": "could_not_parse",
+            }
 
-        # Step 1: teammate's regex. Its output is NOT trusted: it is validated,
-        # and if it crashes or returns invalid data we fall back to the LLM.
+        warnings = _warning_codes(clean_text)
+
         try:
-            regex_result = parse_with_regex(text)
-        except Exception as e:
-            print(f"[Regex Exception]: {e}")
+            regex_result = parse_with_regex(clean_text)
+        except Exception as exc:  # pragma: no cover - defensive
+            print(f"[Regex Exception]: {exc}")
             regex_result = None
 
         if isinstance(regex_result, dict) and "error" in regex_result:
-            regex_result = None  # a regex module may report failure as an error dict
+            regex_result = None
 
-        if regex_result is not None:
-            ok, _ = validate_extracted_data(regex_result)
-            if ok and regex_result["bank"] != DEFAULT_BANK:
-                return _clean(regex_result)
+        if isinstance(regex_result, dict):
+            ok, missing = validate_extracted_data(regex_result)
+            if ok and regex_result.get("bank") != DEFAULT_BANK:
+                fields = {
+                    "amount": regex_result["amount"],
+                    "date": regex_result["date"],
+                    "time": regex_result["time"],
+                    "channel": regex_result["channel"],
+                    "bank": regex_result["bank"],
+                    "reference": regex_result["reference"],
+                }
+                result = {
+                    "ok": True,
+                    "fields": fields,
+                    "missing": [],
+                    "reason": None,
+                    "message": None,
+                    "source": "pattern",
+                    "warnings": warnings,
+                }
+                result.update(fields)
+                return result
 
-        # Step 2: LLM fallback, validated + checked against the source text.
-        llm_result = parse_with_llm(text)
+        llm_result = parse_with_llm(clean_text)
+        if isinstance(llm_result, dict) and "_ai_error_reason" in llm_result:
+            return {
+                "ok": False,
+                "fields": {},
+                "missing": ["text"],
+                "reason": llm_result["_ai_error_reason"],
+                "message": "The AI parser is unavailable right now.",
+                "source": "none",
+                "warnings": warnings,
+                "error": "could_not_parse",
+            }
+
+        if not isinstance(llm_result, dict):
+            return {
+                "ok": False,
+                "fields": {},
+                "missing": list(REQUIRED_FIELDS),
+                "reason": "could_not_parse",
+                "message": "The parser could not extract a valid transaction.",
+                "source": "none",
+                "warnings": warnings,
+                "error": "could_not_parse",
+            }
+
         ok, missing = validate_extracted_data(llm_result)
         if ok:
-            missing = ungrounded_fields(llm_result, text)
-            ok = not missing
+            grounded = ungrounded_fields(llm_result, clean_text)
+            amount_guard = _balance_or_fee_guard(clean_text, llm_result.get("amount"))
+            if grounded or amount_guard:
+                ok = False
+                missing = sorted(set(missing + grounded + (["amount"] if amount_guard else [])))
         if ok:
-            return _clean(llm_result)
-        return {"error": "could_not_parse", "missing": missing}
-    except Exception as e:  # last-resort guard: the contract says never crash
-        print(f"[parse_alert Exception]: {e}")
-        return {"error": "could_not_parse", "missing": list(REQUIRED_FIELDS)}
+            payload = _result_payload(
+                {
+                    "amount": llm_result["amount"],
+                    "date": llm_result["date"],
+                    "time": llm_result["time"],
+                    "channel": llm_result["channel"],
+                    "bank": llm_result["bank"],
+                    "reference": llm_result["reference"],
+                },
+                source="ai",
+                warnings=warnings,
+            )
+            payload["reason"] = None
+            payload["message"] = None
+            payload["error"] = None
+            return payload
+
+        return {
+            "ok": False,
+            "fields": {
+                "amount": llm_result.get("amount"),
+                "date": llm_result.get("date"),
+                "time": llm_result.get("time"),
+                "channel": llm_result.get("channel"),
+                "bank": llm_result.get("bank"),
+                "reference": llm_result.get("reference"),
+            },
+            "missing": missing,
+            "reason": "could_not_parse",
+            "message": "The parser could not confidently extract the debit alert.",
+            "source": "ai",
+            "warnings": warnings,
+            "error": "could_not_parse",
+        }
+    except Exception as exc:  # last-resort guard: the contract says never crash
+        print(f"[parse_alert Exception]: {exc}")
+        return {
+            "ok": False,
+            "fields": {},
+            "missing": list(REQUIRED_FIELDS),
+            "reason": "could_not_parse",
+            "message": "The parser could not extract a valid transaction.",
+            "source": "none",
+            "warnings": [],
+            "error": "could_not_parse",
+        }
+
+
+def parse_alert(text: str) -> dict:
+    """regex -> (validate) -> LLM fallback -> validate + grounding -> result."""
+    result = parse_alert_result(text)
+    if result.get("ok"):
+        return {k: result[k] for k in REQUIRED_FIELDS if k in result}
+    return {"error": "could_not_parse", "missing": result.get("missing", [])}
+
+
+def parse_screenshot_result(image_path: str) -> dict:
+    """Screenshot -> text (image_input.py) -> parse_alert_result. Never raises."""
+    try:
+        text = extract_text_from_image(image_path)
+        if not text:
+            return {
+                "ok": False,
+                "fields": {},
+                "missing": ["image"],
+                "reason": "no_text",
+                "message": "No text could be extracted from the image.",
+                "source": "none",
+                "warnings": [],
+                "error": "could_not_parse",
+            }
+        return parse_alert_result(text)
+    except Exception as exc:
+        print(f"[parse_screenshot Exception]: {exc}")
+        return {
+            "ok": False,
+            "fields": {},
+            "missing": ["image"],
+            "reason": "bad_image",
+            "message": "The screenshot could not be read.",
+            "source": "none",
+            "warnings": [],
+            "error": "could_not_parse",
+        }
 
 
 def parse_screenshot(image_path: str) -> dict:
     """Screenshot -> text (image_input.py) -> parse_alert. Never raises."""
-    try:
-        text = extract_text_from_image(image_path)
-        if not text:
-            return {"error": "could_not_parse", "missing": ["image"]}
-        return parse_alert(text)
-    except Exception as e:
-        print(f"[parse_screenshot Exception]: {e}")
-        return {"error": "could_not_parse", "missing": ["image"]}
+    result = parse_screenshot_result(image_path)
+    if result.get("ok"):
+        return {k: result[k] for k in REQUIRED_FIELDS if k in result}
+    return {"error": "could_not_parse", "missing": result.get("missing", ["image"])}
 
 
 # ---------------------------------------------------------------------
