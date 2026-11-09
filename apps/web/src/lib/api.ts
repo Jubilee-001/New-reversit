@@ -14,7 +14,12 @@ class ApiError extends Error {
 }
 
 async function request(path: string, init: RequestInit = {}): Promise<Response> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json', ...(init.headers as Record<string, string> | undefined) }
+  const headers = new Headers(init.headers ?? {})
+  if (init.body instanceof FormData) {
+    headers.delete('Content-Type')
+  } else {
+    headers.set('Content-Type', 'application/json')
+  }
   const res = await fetch(`${API_BASE}${path}`, { ...init, headers })
   if (!res.ok) {
     let body: unknown

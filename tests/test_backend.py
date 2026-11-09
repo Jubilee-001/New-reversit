@@ -276,6 +276,17 @@ def test_parse_text_empty():
     assert resp.json()["error"] == "could_not_parse"
 
 
+def test_extract_image_text_success():
+    with patch("app.parser_api.extract_text_from_image") as mock_extract:
+        mock_extract.return_value = "Account debited for NGN2,000.00"
+        resp = client.post(
+            "/api/extract-image-text",
+            files={"file": ("alert.png", b"\x89PNG\r\n\x1a\n" + b"x" * 20, "image/png")},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["text"] == "Account debited for NGN2,000.00"
+
+
 def test_extract_image_text_wrong_type():
     resp = client.post(
         "/api/extract-image-text",

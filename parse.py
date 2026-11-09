@@ -8,10 +8,10 @@ Public contract:
 Success: {"amount", "date", "time", "channel", "bank", "reference"}
 Failure: {"error": "could_not_parse", "missing": [<field names>]}
 """
-import os
-import re
 import json
 import math
+import os
+import re
 import time
 from collections import deque
 from datetime import datetime
@@ -41,25 +41,51 @@ REASON_CODES = (
     "bad_image",
 )
 
-LLM_MODEL = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
-# Qwen models may emit reasoning tokens that eat the budget and truncate the
-# JSON. Keep this comfortably above 150. Optionally set GROQ_REASONING_EFFORT
-# (e.g. "none") in .env if the model supports it.
+# The project's Groq account currently exposes `qwen/qwen3.8-27b`, while the old
+# llama names are stale or inaccessible on this account. Use the supported model
+# by default and keep a small compatibility fallback chain.
+TEXT_LLM_MODEL = os.getenv("GROQ_TEXT_MODEL") or os.getenv("GROQ_MODEL") or "qwen/qwen3.8-27b"
+LLM_MODEL = TEXT_LLM_MODEL
 LLM_MAX_TOKENS = int(os.getenv("GROQ_MAX_TOKENS", "400"))
 AI_CALL_LIMIT_PER_MINUTE = int(os.getenv("GROQ_RATE_LIMIT_PER_MINUTE", "6"))
 _AI_CALL_TIMES = deque()
+
+
+def _model_candidates(env_name: str, defaults: tuple[str, ...]) -> list[str]:
+    candidates: list[str] = []
+    for raw in (os.getenv(env_name), *defaults):
+        model = (raw or "").strip()
+        if model and model not in candidates:
+            candidates.append(model)
+    return candidates
+
+
+def _is_decommissioned_model_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return "decommissioned" in message or "no longer supported" in message or "model_decommissioned" in message
 
 # ---------------------------------------------------------------------
 # Normalizers (shared by regex path, LLM path and validator)
 # ---------------------------------------------------------------------
 _DATE_FORMATS = (
-    "%Y-%m-%d", "%Y/%m/%d", "%d-%b-%Y", "%d-%B-%Y", "%d/%m/%Y", "%d-%m-%Y",
+    "%Y-%m-%d",
+    "%Y/%m/%d",
+    "%d-%b-%Y",
+    "%d-%B-%Y",
+    "%m/%d/%Y",
+    "%d/%m/%Y",
+    "%d-%m-%Y",
+    "%d %b %Y",
+    "%d %B %Y",
+    "%B %d %Y",
+    "%b %d %Y",
 )
 
 
 def normalize_date(raw) -> str | None:
     """Return YYYY-MM-DD or None if the value is not a recognizable date."""
-    raw = str(raw).strip()
+    raw = re.sub(r"(?<=\d)(?:st|nd|rd|th)\b", "", str(raw).strip(), flags=re.IGNORECASE)
+    raw = raw.replace(",", "")
     for fmt in _DATE_FORMATS:
         try:
             return datetime.strptime(raw, fmt).strftime("%Y-%m-%d")
@@ -68,15 +94,26 @@ def normalize_date(raw) -> str | None:
     return None
 
 
-_TIME_RE = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$")
+_TIME_RE = re.compile(
+    r"^(\d{1,2}):([0-5]\d)(?::([0-5]\d))?\s*(AM|PM)?$",
+    re.IGNORECASE,
+)
 
 
 def normalize_time(raw) -> str | None:
-    """Return HH:MM (24h) or None. Accepts H:MM and HH:MM:SS."""
+    """Return HH:MM (24h), accepting seconds and 12-hour AM/PM values."""
     m = _TIME_RE.match(str(raw).strip())
     if not m:
         return None
-    return f"{int(m.group(1)):02d}:{m.group(2)}"
+    hour = int(m.group(1))
+    meridiem = (m.group(4) or "").upper()
+    if meridiem:
+        if not 1 <= hour <= 12:
+            return None
+        hour = hour % 12 + (12 if meridiem == "PM" else 0)
+    elif hour > 23:
+        return None
+    return f"{hour:02d}:{m.group(2)}"
 
 
 def normalize_amount(raw) -> float | None:
@@ -85,7 +122,7 @@ def normalize_amount(raw) -> float | None:
         return None
     try:
         if isinstance(raw, str):
-            raw = re.sub(r"[,\s₦]|NGN|N(?=\d)", "", raw, flags=re.IGNORECASE)
+            raw = re.sub(r"[,\s₦$€£¥₹]|NGN|N(?=\d)", "", raw, flags=re.IGNORECASE)
         value = float(raw)
     except (ValueError, TypeError):
         return None
@@ -176,34 +213,40 @@ def parse_with_llm(text: str) -> dict | None:
         print("[Warning] GROQ_API_KEY not found in environment.")
         return {"_ai_error_reason": "ai_unavailable"}
 
-    if not _ai_call_allowed():
-        return {"_ai_error_reason": "ai_busy"}
-
     kwargs = {}
     effort = os.getenv("GROQ_REASONING_EFFORT")
     if effort:
         kwargs["reasoning_effort"] = effort
 
-    try:
-        client = Groq(api_key=api_key, timeout=15.0, max_retries=1)
-        completion = client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": f"Alert text:\n{text}"},
-            ],
-            model=LLM_MODEL,
-            temperature=0.0,
-            max_tokens=LLM_MAX_TOKENS,
-            response_format={"type": "json_object"},
-            **kwargs,
-        )
-        result = _extract_json(completion.choices[0].message.content or "")
-        if isinstance(result, dict):
-            return result
-        return {"_ai_error_reason": "ai_error"}
-    except Exception as e:
-        print(f"[LLM Error]: {e}")
-        return {"_ai_error_reason": "ai_error"}
+    client = Groq(api_key=api_key, timeout=15.0, max_retries=1)
+    last_error: Exception | None = None
+    for model in _model_candidates("GROQ_TEXT_MODEL", ("qwen/qwen3.8-27b", "llama-3.3-70b-versatile")):
+        if not _ai_call_allowed():
+            return {"_ai_error_reason": "ai_busy"}
+        try:
+            completion = client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": f"Alert text:\n{text}"},
+                ],
+                model=model,
+                temperature=0.0,
+                max_tokens=LLM_MAX_TOKENS,
+                response_format={"type": "json_object"},
+                **kwargs,
+            )
+            result = _extract_json(completion.choices[0].message.content or "")
+            if isinstance(result, dict):
+                return result
+            return {"_ai_error_reason": "ai_error"}
+        except Exception as e:  # noqa: BLE001 - Groq clients may raise provider-specific exceptions.
+            last_error = e
+            print(f"[LLM Error for model={model}]: {e}")
+            if not _is_decommissioned_model_error(e):
+                return {"_ai_error_reason": "ai_error"}
+    if last_error is not None:
+        print(f"[LLM Error]: {last_error}")
+    return {"_ai_error_reason": "ai_error"}
 
 
 # ---------------------------------------------------------------------
@@ -313,10 +356,8 @@ def _balance_or_fee_guard(text: str, amount: object) -> bool:
         r"\b(?:available\s+bal|avail\s+bal|balance|bal|fee|charge|vat|commission)\b",
         lower,
     )
-    amount_re = re.search(rf"(?:ngn|₦|n\s*\d|\b\d[\d,]*(?:\.\d{{1,2}})?\b)", lower)
-    if balance_ctx and amount_re and norm in lower:
-        return True
-    return False
+    amount_re = re.search(r"(?:ngn|₦|n\s*\d|\b\d[\d,]*(?:\.\d{1,2})?\b)", lower)
+    return bool(balance_ctx and amount_re and norm in lower)
 
 
 def _result_payload(fields: dict | None, *, source: str, warnings: list[dict[str, str]], reason: str | None = None, message: str | None = None, missing: list[str] | None = None) -> dict:
@@ -407,7 +448,7 @@ def parse_alert_result(text: str) -> dict:
 
         try:
             regex_result = parse_with_regex(clean_text)
-        except Exception as exc:  # pragma: no cover - defensive
+        except Exception as exc:  # pragma: no cover - defensive  # noqa: BLE001
             print(f"[Regex Exception]: {exc}")
             regex_result = None
 
@@ -504,7 +545,7 @@ def parse_alert_result(text: str) -> dict:
             "warnings": warnings,
             "error": "could_not_parse",
         }
-    except Exception as exc:  # last-resort guard: the contract says never crash
+    except Exception as exc:  # last-resort guard: the contract says never crash  # noqa: BLE001
         print(f"[parse_alert Exception]: {exc}")
         return {
             "ok": False,
@@ -542,7 +583,7 @@ def parse_screenshot_result(image_path: str) -> dict:
                 "error": "could_not_parse",
             }
         return parse_alert_result(text)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - screenshot extraction can fail at provider or filesystem layers.
         print(f"[parse_screenshot Exception]: {exc}")
         return {
             "ok": False,

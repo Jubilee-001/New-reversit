@@ -82,7 +82,7 @@ def _parse_date(text: str) -> str | None:
         (r"\b(\d{4}-\d{1,2}-\d{1,2})\b", ("%Y-%m-%d",)),
         (
             r"\b(\d{1,2}/\d{1,2}/\d{4})\b",
-            ("%d/%m/%Y",),
+            ("%m/%d/%Y", "%d/%m/%Y"),
         ),
         (
             r"\b(\d{1,2}-(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)"

@@ -78,11 +78,19 @@ def parse_text(payload: ParseTextInput, request: Request):
     if not text:
         return {"error": "could_not_parse", "missing": ["text"]}
 
-    return parse_alert(text)
+    try:
+        result = parse_alert(text)
+        if not isinstance(result, dict):
+            print("[parse-text] parser returned a non-dict payload")
+            return {"error": "could_not_parse", "missing": ["text"]}
+        return result
+    except Exception as exc:  # noqa: BLE001 - parser wrappers should never crash the FastAPI route.
+        print(f"[parse-text] failed to parse alert: {exc}")
+        return {"error": "could_not_parse", "missing": ["text"]}
 
 
 @router.post("/extract-image-text")
-def extract_image_text(request: Request, file: UploadFile = File(...)):
+def extract_image_text(request: Request, file: UploadFile = File(...)) -> dict:
     if not image_limiter.allow(client_key(request)):
         raise HTTPException(
             status_code=429,
@@ -91,6 +99,7 @@ def extract_image_text(request: Request, file: UploadFile = File(...)):
 
     ext = _extension(file)
     if ext is None:
+        print(f"[extract-image-text] unsupported file upload: filename={file.filename!r}, content_type={file.content_type!r}")
         raise HTTPException(
             status_code=415,
             detail={"error": "unsupported_type", "message": "Use a PNG, JPG, JPEG or WebP image."},
@@ -108,6 +117,7 @@ def extract_image_text(request: Request, file: UploadFile = File(...)):
             detail={"error": "too_large", "message": "Images must be 4 MB or smaller."},
         )
     if not _looks_like(ext, data):
+        print(f"[extract-image-text] file signature did not match image type {ext}: filename={file.filename!r}")
         raise HTTPException(
             status_code=415,
             detail={"error": "unsupported_type", "message": "That file is not a PNG, JPG, JPEG or WebP image."},
@@ -119,11 +129,18 @@ def extract_image_text(request: Request, file: UploadFile = File(...)):
             tmp.write(data)
             path = tmp.name
         text = extract_text_from_image(path)
+    except Exception as exc:
+        print(f"[extract-image-text] OCR failed: {exc}")
+        raise HTTPException(
+            status_code=502,
+            detail={"error": "could_not_read", "message": PROVIDER_ERROR_MESSAGE},
+        ) from exc
     finally:
         if path and os.path.exists(path):
             os.unlink(path)
 
     if not text:
+        print("[extract-image-text] OCR returned empty text")
         raise HTTPException(
             status_code=502,
             detail={"error": "could_not_read", "message": PROVIDER_ERROR_MESSAGE},

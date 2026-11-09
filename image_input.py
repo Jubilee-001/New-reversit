@@ -16,9 +16,10 @@ from groq import Groq
 
 load_dotenv()
 
-# Groq's vision docs list qwen/qwen3.8-27b as multimodal, i.e. the same model
-# parse.py already uses. Override with GROQ_VISION_MODEL if that changes.
-VISION_MODEL = os.getenv("GROQ_VISION_MODEL", os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b"))
+# This Groq account currently exposes the Qwen multimodal model for OCR-style
+# image parsing. Keep a compatibility fallback chain so deprecated names do not
+# break the screen-to-text workflow.
+VISION_MODEL = os.getenv("GROQ_VISION_MODEL") or os.getenv("GROQ_MODEL") or "qwen/qwen3.8-27b"
 
 # Groq free tier caps OUTPUT tokens per minute (1000 for this model), and a
 # request is rejected if its max tokens exceed that. A bank alert transcribes
@@ -77,25 +78,42 @@ def extract_text_from_image(image_path: str) -> str | None:
         if effort:
             kwargs["reasoning_effort"] = effort
 
-        completion = client.chat.completions.create(
-            model=VISION_MODEL,
-            messages=[{
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": OCR_PROMPT},
-                    {"type": "image_url", "image_url": {"url": data_url}},
-                ],
-            }],
-            temperature=0.0,
-            max_completion_tokens=IMAGE_MAX_TOKENS,
-            **kwargs,
-        )
-        text = completion.choices[0].message.content or ""
-        text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
-        if not text or text.upper() == "NO_TEXT":
-            return None
-        return text
-    except Exception as e:
+        vision_models = []
+        env_model = os.getenv("GROQ_VISION_MODEL") or os.getenv("GROQ_MODEL")
+        for model in (env_model, "qwen/qwen3.8-27b", "llama-3.2-90b-vision-preview", "llama-3.2-11b-vision-preview"):
+            if model and model not in vision_models:
+                vision_models.append(model)
+
+        last_error: Exception | None = None
+        for model in vision_models:
+            try:
+                completion = client.chat.completions.create(
+                    model=model,
+                    messages=[{
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": OCR_PROMPT},
+                            {"type": "image_url", "image_url": {"url": data_url}},
+                        ],
+                    }],
+                    temperature=0.0,
+                    max_completion_tokens=IMAGE_MAX_TOKENS,
+                    **kwargs,
+                )
+                text = completion.choices[0].message.content or ""
+                text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+                if not text or text.upper() == "NO_TEXT":
+                    return None
+                return text
+            except Exception as e:  # noqa: BLE001 - Groq vision calls can raise provider-specific errors.
+                last_error = e
+                print(f"[Vision Error for model={model}]: {e}")
+                if "decommissioned" not in str(e).lower() and "no longer supported" not in str(e).lower():
+                    return None
+        if last_error is not None:
+            print(f"[Vision Error]: {last_error}")
+        return None
+    except Exception as e:  # noqa: BLE001 - Groq vision calls can raise provider-specific errors.
         print(f"[Vision Error]: {e}")
         return None
 
