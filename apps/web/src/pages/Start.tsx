@@ -6,6 +6,7 @@ import { ErrorSummary } from '@/components/ui/ErrorSummary'
 import { navigate, routeTitle } from '@/router'
 import { parseText, extractImageText } from '@/lib/api'
 import { saveDraft } from '@/lib/draft'
+import { ArrowRight, FileText, ImagePlus, LockKeyhole, UploadCloud } from 'lucide-react'
 
 const EXAMPLES: { label: string; text: string }[] = [
   {
@@ -199,108 +200,122 @@ export default function Start() {
     <Layout title={routeTitle('/start')} step={{ step: 1, total: 4 }}>
       <ErrorSummary errors={errors} />
 
-      <h1 className="text-2xl font-semibold">Add your alert</h1>
-      <p className="mt-2 max-w-[65ch] text-[var(--muted)]">
-        Paste your debit alert text, or upload a screenshot of the alert. ReverseIt reads the amount, date, time,
-        channel, bank and reference. Voice is not supported — type or upload instead.
-      </p>
+      <section className="mb-7 max-w-2xl">
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-indigo-700">Transaction details</p>
+        <h1 className="text-3xl font-semibold tracking-tight text-slate-950">Add your alert</h1>
+        <p className="mt-2 max-w-[65ch] text-slate-600">
+          Paste a debit alert or upload a screenshot. We’ll extract the key details for you to check before continuing.
+        </p>
+      </section>
 
-      <div className="mt-6 border border-[var(--line)] rounded-md p-4 space-y-4">
-        <div className="flex items-start gap-3">
+      {/* UX: clear, keyboard-accessible mode cards make the two input paths easy to compare. */}
+      <fieldset className="mb-5 grid gap-3 sm:grid-cols-2">
+        <legend className="sr-only">Choose how to add your alert</legend>
+        <label className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition-all focus-within:ring-4 focus-within:ring-indigo-600/10 ${
+          mode === 'paste' ? 'border-indigo-500 bg-indigo-50/60 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300'
+        }`}>
           <input
             id="mode-paste"
             type="radio"
             name="mode"
             checked={mode === 'paste'}
             onChange={() => setMode('paste')}
-            className="mt-0.5 shrink-0 text-[var(--accent)]"
+            className="mt-1 size-4 shrink-0 accent-indigo-600"
           />
-          <label htmlFor="mode-paste" className="cursor-pointer">
-            <span className="font-medium text-[var(--ink)]">Paste alert text</span>
-          </label>
-        </div>
-        <div className="flex items-start gap-3">
+          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-white text-indigo-700 shadow-sm">
+            <FileText size={18} aria-hidden="true" />
+          </span>
+          <span>
+            <span className="block font-semibold text-slate-950">Paste alert text</span>
+            <span className="mt-0.5 block text-sm text-slate-600">SMS, email or transaction message</span>
+          </span>
+        </label>
+        <label className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition-all focus-within:ring-4 focus-within:ring-indigo-600/10 ${
+          mode === 'image' ? 'border-indigo-500 bg-indigo-50/60 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300'
+        }`}>
           <input
             id="mode-image"
             type="radio"
             name="mode"
             checked={mode === 'image'}
             onChange={() => setMode('image')}
-            className="mt-0.5 shrink-0 text-[var(--accent)]"
+            className="mt-1 size-4 shrink-0 accent-indigo-600"
           />
-          <label htmlFor="mode-image" className="cursor-pointer">
-            <span className="font-medium text-[var(--ink)]">Upload screenshot</span>
-          </label>
-        </div>
-      </div>
+          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-white text-indigo-700 shadow-sm">
+            <ImagePlus size={18} aria-hidden="true" />
+          </span>
+          <span>
+            <span className="block font-semibold text-slate-950">Upload a screenshot</span>
+            <span className="mt-0.5 block text-sm text-slate-600">Receipt, banking app or transaction slip</span>
+          </span>
+        </label>
+      </fieldset>
 
       {mode === 'paste' ? (
-        <>
+        <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.05)] sm:p-6">
           <TextareaField
+            id="alert-text"
             label="Alert text"
-            placeholder="Paste the debit alert SMS or message here"
+            placeholder="Paste the full debit alert here…"
             value={text}
             onChange={(e) => setText(e.target.value)}
             error={errors.find((e) => e.field === 'text')?.message}
           />
           {isCreditAlert && (
-            <Banner kind="warn" title="This looks like money received, not a debit." body={
-              <>ReverseIt is for debits that went wrong. If money was received into your account, contact your bank directly.</>
-            } />
+            <Banner
+              kind="warn"
+              title="This looks like money received, not a debit."
+              body={<>ReverseIt is for debits that went wrong. If money was received into your account, contact your bank directly.</>}
+            />
           )}
-          <div className="mt-4 flex gap-3">
+          <div className="mt-5 flex flex-col gap-3 sm:flex-row">
             <Button onClick={handlePaste} disabled={loading}>
-              {loading ? 'Reading…' : 'Read my alert'}
+              {loading ? 'Reading…' : <>Read my alert <ArrowRight className="ml-2" size={16} aria-hidden="true" /></>}
             </Button>
             <Button variant="secondary" onClick={goManual} disabled={loading}>
               Type the details myself
             </Button>
           </div>
-        </>
+        </section>
       ) : (
-        <>
-          <TextareaField
-            label="Screenshot text (check it)"
-            placeholder="Extracted text appears here after upload"
-            value={extractedText}
-            onChange={(e) => setExtractedText(e.target.value)}
-          />
+        <section className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.05)] sm:p-6">
           {showingExtracted ? (
-            <>
-              <p className="mt-2 text-xs text-[var(--muted)]">
-                We turned your screenshot into text. Check it, then continue — nothing is parsed until you do.
-              </p>
-              <div className="mt-4 flex gap-3">
-                <Button onClick={useExtractedText}>Use this text</Button>
+            <div className="space-y-4">
+              <div className="flex items-start gap-3">
+                <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-700">
+                  <FileText size={18} aria-hidden="true" />
+                </span>
+                <div>
+                  <h2 className="font-semibold text-slate-950">Text extracted from screenshot</h2>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Review the text before we read the transaction details. You can edit anything that looks incorrect.
+                  </p>
+                </div>
+              </div>
+              <TextareaField
+                id="extracted-text"
+                label="Extracted text"
+                placeholder="Extracted text appears here after upload"
+                value={extractedText}
+                onChange={(e) => setExtractedText(e.target.value)}
+              />
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <Button onClick={useExtractedText} disabled={loading || !extractedText.trim()}>
+                  {loading ? 'Reading…' : <>Use this text <ArrowRight className="ml-2" size={16} aria-hidden="true" /></>}
+                </Button>
                 <Button variant="secondary" onClick={() => setShowingExtracted(false)}>
-                  Try again / type instead
+                  Try another image
                 </Button>
               </div>
-            </>
+            </div>
           ) : (
-            <>
-              <input
-                id="screenshot"
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                onChange={(e) => {
-                  const file = e.target.files?.[0]
-                  if (file) void handleUpload(file)
-                }}
-              />
-              <p className="mt-2 text-xs text-[var(--muted)]">
-                PNG, JPG or WebP, up to 4 MB. The image is sent to the AI provider for text extraction and deleted
-                immediately afterwards; nothing is logged.
-              </p>
-            </>
+            <ImageDropzone onFile={handleUpload} disabled={loading} />
           )}
-        </>
+        </section>
       )}
 
       {apiError && (
-        <Banner kind="error" title={apiError} body={
-          <>You can still type the details yourself below.</>
-        } />
+        <Banner kind="error" title={apiError} body={<>You can still type the details yourself below.</>} />
       )}
 
       {parseOk && (
@@ -309,47 +324,111 @@ export default function Start() {
         } />
       )}
 
-      <div className="mt-4 flex gap-3">
-        <Button variant="secondary" onClick={goManual} disabled={loading}>
-          Type the details myself
+      <div className="mt-5 flex justify-center">
+        <Button variant="text" onClick={goManual} disabled={loading}>
+          Enter transaction details manually
         </Button>
       </div>
 
-      <div className="mt-8">
-        <h3 className="font-semibold mb-3">Or try a made-up sample</h3>
-        <p className="text-xs text-[var(--muted)] mb-3">
-          These are fictional examples only — they run through the real parser and are never treated as real cases.
+      <section className="mt-9 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.04)] sm:p-6">
+        <h2 className="font-semibold tracking-tight text-slate-950">Try a sample alert</h2>
+        <p className="mt-1 text-sm text-slate-600">
+          Fictional examples only — useful for seeing how the extraction works.
         </p>
-        <div className="space-y-2">
+        <div className="mt-4 flex flex-wrap gap-2">
           {EXAMPLES.map((example) => (
-            <Button key={example.label} variant="text" onClick={() => handleExample(example.text)} className="w-full text-left">
+            <Button key={example.label} variant="secondary" onClick={() => handleExample(example.text)} className="!min-h-10 !px-3 !py-2 text-xs">
               {example.label}
             </Button>
           ))}
         </div>
-      </div>
+      </section>
 
-      <p className="mt-6 text-xs text-[var(--muted)] max-w-[65ch]">
-        What we send: your alert text or screenshot is sent to Groq (an AI provider) to extract the transaction
-        details. Your case is stored on our server until you delete it. We never store full account numbers and never
-        write alert text or images to logs.
+      <p className="mt-5 flex items-start gap-2 text-xs leading-5 text-slate-600">
+        <LockKeyhole className="mt-0.5 shrink-0 text-slate-500" size={14} aria-hidden="true" />
+        <span>
+          Your alert is sent to Groq to extract transaction details. We don’t store full account numbers or log alert text or images.
+        </span>
       </p>
     </Layout>
   )
 }
 
-function TextareaField({ label, placeholder, value, onChange, error }: { label: string; placeholder: string; value: string; onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void; error?: string }) {
+function ImageDropzone({ onFile, disabled }: { onFile: (file: File) => void; disabled: boolean }) {
+  const [dragActive, setDragActive] = React.useState(false)
+
+  const acceptFile = (file?: File) => {
+    if (file && !disabled) onFile(file)
+  }
+
   return (
-    <>
-      <label className="block text-sm font-medium text-[var(--ink)] mb-1.5">{label}</label>
+    <label
+      htmlFor="screenshot"
+      onDragEnter={(event) => {
+        event.preventDefault()
+        if (!disabled) setDragActive(true)
+      }}
+      onDragOver={(event) => event.preventDefault()}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragActive(false)
+      }}
+      onDrop={(event) => {
+        event.preventDefault()
+        setDragActive(false)
+        acceptFile(event.dataTransfer.files[0])
+      }}
+      className={`group flex min-h-64 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-5 py-9 text-center transition-all duration-200 focus-within:ring-4 focus-within:ring-indigo-600/15 ${
+        dragActive
+          ? 'scale-[1.01] border-indigo-500 bg-indigo-50'
+          : 'border-slate-300 bg-slate-50/70 hover:border-indigo-400 hover:bg-indigo-50/40'
+      } ${disabled ? 'cursor-wait opacity-70' : ''}`}
+    >
+      <input
+        id="screenshot"
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        disabled={disabled}
+        onChange={(event) => {
+          acceptFile(event.target.files?.[0])
+          event.target.value = ''
+        }}
+        className="sr-only"
+        aria-label="Choose a transaction screenshot"
+      />
+      <span className={`mb-4 grid size-14 place-items-center rounded-2xl transition-colors ${
+        dragActive ? 'bg-indigo-600 text-white' : 'bg-white text-indigo-700 shadow-sm'
+      }`}>
+        <UploadCloud size={25} aria-hidden="true" />
+      </span>
+      <span className="text-base font-semibold text-slate-950">
+        {disabled ? 'Reading your image…' : dragActive ? 'Drop your screenshot here' : 'Drop a screenshot to upload'}
+      </span>
+      <span className="mt-1 text-sm text-slate-600">or click to browse your device</span>
+      <span className="mt-4 rounded-full border border-slate-200 bg-white px-3 py-1 font-mono text-[10px] font-medium tracking-wide text-slate-600">
+        PNG · JPG · WEBP · MAX 4 MB
+      </span>
+      <span className="mt-3 text-xs text-slate-500">Works with screenshots of OPay and Moniepoint slips</span>
+    </label>
+  )
+}
+
+function TextareaField({ id, label, placeholder, value, onChange, error }: { id: string; label: string; placeholder: string; value: string; onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void; error?: string }) {
+  return (
+    <div>
+      <label htmlFor={id} className="mb-2 block text-[11px] font-semibold uppercase tracking-wider text-slate-600">{label}</label>
       <textarea
-        className="block w-full rounded-md border border-[var(--line)] bg-[var(--surface)] px-4 py-3 text-[var(--ink)] focus-visible:outline-3 focus-visible:outline-[var(--focus)]"
+        id={id}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? `${id}-error` : undefined}
+        className={`block min-h-40 w-full resize-y rounded-xl border bg-slate-50/70 px-4 py-3.5 font-mono text-sm leading-6 text-slate-900 shadow-inner shadow-slate-900/[0.02] transition-all placeholder:font-sans placeholder:text-slate-400 focus:border-indigo-600 focus:bg-white focus:outline-none focus:ring-4 focus:ring-indigo-600/10 ${
+          error ? 'border-rose-500' : 'border-slate-200'
+        }`}
         placeholder={placeholder}
         value={value}
         onChange={onChange}
         rows={6}
       />
-      {error && <p className="mt-2 text-xs text-[var(--danger)]">{error}</p>}
-    </>
+      {error && <p id={`${id}-error`} className="mt-1.5 text-xs font-medium text-rose-700">{error}</p>}
+    </div>
   )
 }

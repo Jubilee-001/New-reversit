@@ -1,24 +1,26 @@
 @import "tailwindcss";
 
 :root {
-  --canvas: #f7f7f5;
+  --canvas: #f8fafc;
   --surface: #ffffff;
-  --ink: #14181c;
-  --muted: #4a5158;
-  --line: #d7d9dc;
-  --accent: #0f6b63;
-  --accent-hover: #0b564f;
-  --accent-subtle: #e6f2f0;
-  --focus: #0f6b63;
-  --danger: #a4261d;
-  --warn: #8a5a00;
-  --ok: #1d6b3a;
+  --ink: #111827;
+  --muted: #475569;
+  --line: #e2e8f0;
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-subtle: #eef2ff;
+  --focus: #4f46e5;
+  --danger: #b42318;
+  --warn: #92400e;
+  --ok: #047857;
 }
 
 html {
-  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color: var(--ink);
   background: var(--canvas);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
   /* Prevent iOS text-size inflation on zoom/rotate */
   -webkit-text-size-adjust: 100%;
 }
@@ -36,8 +38,18 @@ body {
   padding-bottom: env(safe-area-inset-bottom);
 }
 
+::selection {
+  color: #312e81;
+  background: #e0e7ff;
+}
+
+:where(textarea) {
+  scrollbar-color: #cbd5e1 transparent;
+  scrollbar-width: thin;
+}
+
 :focus-visible {
-  outline: 3px solid var(--focus);
+  outline: 3px solid color-mix(in srgb, var(--focus) 80%, white);
   outline-offset: 2px;
 }
 

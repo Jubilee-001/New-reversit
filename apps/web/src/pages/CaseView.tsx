@@ -129,19 +129,45 @@ export default function CaseView({ params }: { params?: { id: string } }) {
   }
 
   const { hours, passed } = countdown
+  const deadlineProgress = record.sent_at && record.deadline_at
+    ? Math.max(0, Math.min(100, ((Date.now() - new Date(record.sent_at).getTime()) /
+      (new Date(record.deadline_at).getTime() - new Date(record.sent_at).getTime())) * 100))
+    : null
+  const deadlineTone = passed
+    ? 'border-rose-200 bg-rose-50 text-rose-900'
+    : hours !== null && hours <= 24
+      ? 'border-amber-200 bg-amber-50 text-amber-950'
+      : 'border-indigo-200 bg-indigo-50 text-indigo-950'
 
   return (
     <Layout title={`Case ${record.id} — ReverseIt`}>
       {apiError && <Banner kind="error" title={apiError} />}
 
-      <h1 className="text-2xl font-semibold">Your case</h1>
-      <p className="mt-2 text-[var(--muted)]">
-        Case <span className="font-mono">{record.id}</span> · {statusLabel[record.status]} ·
-        created {formatWAT(record.created_at)}
-      </p>
+      <header className="mb-7 rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.04)] sm:p-6">
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-indigo-700">Case record</p>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="text-3xl font-semibold tracking-tight text-slate-950">Your case</h1>
+            <p className="mt-2 text-sm text-slate-600">
+              Created {formatWAT(record.created_at)} · {record.bank_name}
+            </p>
+          </div>
+          <span className={`inline-flex w-fit items-center rounded-full border px-3 py-1.5 text-xs font-semibold ${deadlineTone}`}>
+            {statusLabel[record.status]}
+          </span>
+        </div>
+        <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-100 pt-4 text-xs text-slate-500">
+          <span className="font-semibold uppercase tracking-wider">Case ID</span>
+          <span className="font-mono tracking-tight tabular-nums text-slate-800">{record.id}</span>
+        </div>
+      </header>
 
-      <h2 className="mt-10 mb-3 font-semibold text-[var(--ink)]">Status timeline</h2>
-      <ol className="list-none pl-0 space-y-3 text-[var(--muted)]">
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.04)] sm:p-6">
+        <div className="mb-5">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Activity</p>
+          <h2 className="mt-1 text-lg font-semibold tracking-tight text-slate-950">Status timeline</h2>
+        </div>
+      <ol className="list-none space-y-4 pl-0 text-slate-600">
         {STATUS_ORDER.map((status) => {
           const active = STATUS_ORDER.indexOf(status) <= STATUS_ORDER.indexOf(record.status)
           let when: string | null = null
@@ -153,64 +179,94 @@ export default function CaseView({ params }: { params?: { id: string } }) {
           if (status === 'escalated') when = record.escalated_at
           if (status === 'sent' && record.sent_at_source) noteLine = `Counted from when you told us you sent it ({record.sent_at_source}).`
           return (
-            <li key={status} className={`flex items-start gap-3 ${active ? 'text-[var(--ink)]' : ''}`}>
-              <span className={`shrink-0 w-6 h-6 rounded-full border flex items-center justify-center text-xs font-medium ${
-                active ? 'bg-[var(--accent)] text-white border-[var(--accent)]' : 'border-[var(--line)] text-[var(--muted)]'
+            <li key={status} className={`flex items-start gap-3.5 ${active ? 'text-slate-950' : 'text-slate-500'}`}>
+              <span className={`mt-0.5 grid size-7 shrink-0 place-items-center rounded-full border text-[10px] font-semibold ${
+                active ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-200 bg-white text-slate-500'
               }`}>
                 {STATUS_ORDER.indexOf(status) + 1}
               </span>
               <div>
-                <span className={`font-medium ${active ? 'text-[var(--ink)]' : 'text-[var(--muted)]'}`}>
+                <span className={`text-sm font-semibold ${active ? 'text-slate-950' : 'text-slate-500'}`}>
                   {statusLabel[status]}
                 </span>
-                {when && <span className="block text-xs mt-0.5">{formatWAT(when)}</span>}
-                {noteLine && <span className="text-xs text-[var(--muted)]">{noteLine}</span>}
+                {when && <span className="mt-0.5 block font-mono text-xs tabular-nums text-slate-500">{formatWAT(when)}</span>}
+                {noteLine && <span className="text-xs text-slate-600">{noteLine}</span>}
                 {status === 'bank_replied' && record.bank_ticket && (
-                  <span className="block text-xs mt-0.5 text-[var(--muted)]">Ticket: {record.bank_ticket}</span>
+                  <span className="mt-0.5 block font-mono text-xs text-slate-500">Ticket: {record.bank_ticket}</span>
                 )}
                 {status === 'escalated' && record.escalation_tier && (
-                  <span className="block text-xs mt-0.5 text-[var(--muted)]">Escalation tier {record.escalation_tier}</span>
+                  <span className="mt-0.5 block text-xs text-slate-500">Escalation tier {record.escalation_tier}</span>
                 )}
               </div>
             </li>
           )
         })}
       </ol>
+      </section>
 
       {record.deadline_at && (
-        <div className="mt-8 rounded-md border p-4">
-          <h2 className="font-semibold mb-2">Deadline countdown</h2>
-          <p className="text-[var(--ink)] font-semibold">
-            {passed
-              ? 'Your bank’s timeline has passed.'
-              : hours === null
-                ? 'No deadline is set for this problem type.'
-                : `${hours} hours left.`}
-          </p>
-          <p className="text-xs text-[var(--muted)]">Counted from when you told us you sent it.</p>
+        <section className={`mt-5 rounded-2xl border p-5 shadow-[0_1px_3px_rgba(15,23,42,0.04)] sm:p-6 ${deadlineTone}`}>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] opacity-75">Response window</p>
+              <h2 className="mt-1 text-lg font-semibold tracking-tight">Deadline countdown</h2>
+              <p className="mt-2 font-mono text-2xl font-semibold tracking-tight tabular-nums">
+                {passed
+                  ? 'Timeline passed'
+                  : hours === null
+                    ? 'No deadline'
+                    : `${hours} hours left`}
+              </p>
+              <p className="mt-1 text-xs opacity-80">Counted from when you told us you sent it.</p>
+            </div>
+            <span className="w-fit rounded-full border border-current/20 bg-white/70 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider">
+              {passed ? 'Follow-up available' : hours !== null && hours <= 24 ? 'Due soon' : 'CBN timeline'}
+            </span>
+          </div>
+          {deadlineProgress !== null && (
+            <div className="mt-5">
+              <div className="mb-1.5 flex justify-between text-[10px] font-semibold uppercase tracking-wider opacity-75">
+                <span>Elapsed</span>
+                <span className="font-mono tabular-nums">{Math.round(deadlineProgress)}%</span>
+              </div>
+              <div
+                className="h-2 overflow-hidden rounded-full bg-white/80"
+                role="progressbar"
+                aria-label="Response window elapsed"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(deadlineProgress)}
+              >
+                <div
+                  className={`h-full rounded-full transition-[width] duration-500 ${passed ? 'bg-rose-600' : hours !== null && hours <= 24 ? 'bg-amber-500' : 'bg-indigo-600'}`}
+                  style={{ width: `${deadlineProgress}%` }}
+                />
+              </div>
+            </div>
+          )}
           {passed && (
-            <p className="mt-2 text-xs text-[var(--muted)]">
+            <p className="mt-4 text-xs leading-5 opacity-90">
               Your bank’s timeline for this case has passed. You can <a href={`/case/${record.id}/escalate`}>escalate to the next tier</a>.
               We never say your bank is “in breach” — only you can decide that.
             </p>
           )}
           {record.deadline_at && !passed && (
-            <Button variant="secondary" onClick={addReminder} className="mt-3">
+            <Button variant="secondary" onClick={addReminder} className="mt-4">
               Add reminder (.ics)
             </Button>
           )}
-        </div>
+        </section>
       )}
 
       {!record.deadline_at && record.status === 'sent' && (
-        <div className="mt-8 rounded-md border p-4">
-          <h2 className="font-semibold mb-2">Deadline countdown</h2>
-          <p className="text-[var(--ink)]">No deadline applies to this problem type.</p>
-          <p className="text-xs text-[var(--muted)]">
+        <section className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Response window</p>
+          <h2 className="mt-1 font-semibold tracking-tight text-slate-950">No fixed deadline applies</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
             There is no fixed CBN deadline for a transfer sent to the wrong account. A recall request depends on
             the recipient and your bank.
           </p>
-        </div>
+        </section>
       )}
 
       {isSent && (

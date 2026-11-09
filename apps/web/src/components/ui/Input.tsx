@@ -6,17 +6,20 @@ export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> 
   label?: string
 }
 
-export function Input({ className = '', error, label, ...props }: InputProps) {
+export function Input({ className = '', error, label, id, ...props }: InputProps) {
   return (
-    <>
-      {label && <Label>{label}</Label>}
+    <div className="w-full">
+      {label && <Label htmlFor={id}>{label}</Label>}
       <input
-        className={`block w-full rounded-md border border-[var(--line)] bg-[var(--surface)] px-4 py-3 text-[var(--ink)] focus-visible:outline-3 focus-visible:outline-[var(--focus)] ${
-          error ? 'border-[var(--danger)]' : ''
+        id={id}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error && id ? `${id}-error` : undefined}
+        className={`block w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-950 shadow-sm transition-all placeholder:text-slate-400 hover:border-slate-300 focus:border-indigo-600 focus:outline-none focus:ring-4 focus:ring-indigo-600/10 ${
+          error ? 'border-rose-500 focus:border-rose-600 focus:ring-rose-500/10' : ''
         } ${className}`.trim()}
         {...props}
       />
-      {error && <p className="mt-2 text-xs text-[var(--danger)]">{error}</p>}
-    </>
+      {error && <p id={id ? `${id}-error` : undefined} className="mt-1.5 text-xs font-medium text-rose-700">{error}</p>}
+    </div>
   )
 }

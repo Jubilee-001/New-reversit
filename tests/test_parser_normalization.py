@@ -13,6 +13,7 @@ def test_normalize_time_handles_seconds_and_meridiem():
 def test_normalize_date_handles_ordinal_month_first_date():
     assert parse.normalize_date("May 12th, 2025") == "2025-05-12"
     assert parse.normalize_date("12th May, 2025") == "2025-05-12"
+    assert parse.normalize_date("05/12/2025") == "2025-05-12"
 
 
 def test_parse_alert_returns_normalized_llm_fields():

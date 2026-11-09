@@ -6,9 +6,9 @@ interface ErrorSummaryProps {
 export function ErrorSummary({ errors, onFieldLink }: ErrorSummaryProps) {
   if (errors.length === 0) return null
   return (
-    <div className="rounded-md border border-[var(--line)] bg-[#fbeeec] p-4">
-      <h2 className="font-semibold text-[var(--danger)]">There is a problem</h2>
-      <ul className="mt-2 list-disc list-inside text-sm text-[var(--ink)] space-y-1">
+    <div className="mb-5 rounded-xl border border-rose-200 bg-rose-50 p-4" role="alert">
+      <h2 className="font-semibold text-rose-900">There is a problem</h2>
+      <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-rose-900">
         {errors.map(({ field, message }, i) => (
           <li key={i}>
             {onFieldLink ? (

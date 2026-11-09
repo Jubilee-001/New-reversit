@@ -262,6 +262,33 @@ def test_parse_text_success():
         assert body["bank"] == "ExampleBank"
 
 
+@pytest.mark.parametrize("date", ["May 12th, 2025", "05/12/2025"])
+def test_parse_text_normalizes_date_and_time_before_response(date):
+    with patch("app.parser_api.parse_alert") as mock_parse:
+        mock_parse.return_value = {
+            "amount": 93000.0,
+            "date": date,
+            "time": "08:08 PM",
+            "channel": "pos",
+            "bank": "Example Bank",
+            "reference": "REF93000",
+        }
+        response = client.post(
+            "/api/parse-text",
+            json={"text": "debit alert"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "amount": 93000.0,
+        "date": "2025-05-12",
+        "time": "20:08",
+        "channel": "pos",
+        "bank": "Example Bank",
+        "reference": "REF93000",
+    }
+
+
 def test_parse_text_could_not_parse():
     with patch("app.parser_api.parse_alert") as mock_parse:
         mock_parse.return_value = {"error": "could_not_parse", "missing": ["amount", "date"]}

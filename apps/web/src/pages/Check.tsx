@@ -87,126 +87,171 @@ export default function Check() {
         <Banner kind="error" title={draft.apiError} body={<>You can still type the details yourself below.</>} />
       )}
 
-      <h1 className="text-2xl font-semibold">Check the details</h1>
-      <p className="mt-2 max-w-[65ch] text-[var(--muted)]">
-        Confirm the transaction details read from your alert. Fix anything that is wrong, then tick the box to
-        confirm they match your alert.
-      </p>
+      <div className="mb-7 max-w-2xl">
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-indigo-700">Verify extraction</p>
+        <h1 className="text-3xl font-semibold tracking-tight text-slate-950">Check the details</h1>
+        <p className="mt-2 text-slate-600">
+          Review the receipt summary, then correct any details below before continuing.
+        </p>
+      </div>
 
       {draft.extractedText && (
-        <>
-          <div className="mt-6 border border-[var(--line)] rounded-md bg-[#f7f7f5] p-4">
-            <h2 className="font-semibold text-[var(--ink)] mb-2">Text from your screenshot</h2>
-            <p className="text-sm text-[var(--muted)] whitespace-pre-wrap break-words">{draft.extractedText}</p>
-          </div>
-        </>
+        <details className="mb-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <summary className="cursor-pointer px-4 py-3.5 text-sm font-semibold text-slate-800 marker:text-indigo-600">
+            View text extracted from screenshot
+          </summary>
+          <p className="border-t border-slate-100 bg-slate-50/70 px-4 py-4 font-mono text-xs leading-6 text-slate-600 whitespace-pre-wrap break-words">
+            {draft.extractedText}
+          </p>
+        </details>
       )}
 
-      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Input
-          label="Amount (NGN)"
-          id="amount"
-          value={fields.amount}
-          onChange={(e) => setFields({ ...fields, amount: e.target.value })}
-          error={errors.find((e) => e.field === 'amount')?.message}
-        />
-        <Input
-          label="Date"
-          type="date"
-          id="date"
-          value={fields.date}
-          onChange={(e) => setFields({ ...fields, date: e.target.value })}
-          error={errors.find((e) => e.field === 'date')?.message}
-        />
-        <Input
-          label="Time (24-hour)"
-          type="time"
-          id="time"
-          value={fields.time}
-          onChange={(e) => setFields({ ...fields, time: e.target.value })}
-          error={errors.find((e) => e.field === 'time')?.message}
-        />
-        <Select
-          label="Channel"
-          id="channel"
-          value={fields.channel}
-          onChange={(e) => setFields({ ...fields, channel: e.target.value as ParsedFields['channel'] })}
-          error={errors.find((e) => e.field === 'channel')?.message}
-        >
-          <option value="">Choose a channel</option>
-          {CHANNELS.map((c) => (
-            <option key={c.key} value={c.key}>
-              {c.label}
-            </option>
-          ))}
-        </Select>
-        <div className="flex flex-col">
-          <label htmlFor="bank" className="block text-sm font-medium text-[var(--ink)] mb-1.5">
-            Bank
-          </label>
-          {bankUnknown && banks ? (
-            <>
-              <Select
+      {/* UX: a receipt-like audit summary makes extracted financial data scannable before editing. */}
+      <section aria-label="Extracted transaction summary" className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 sm:px-6">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Transaction record</p>
+            <h2 className="mt-1 font-semibold tracking-tight text-slate-950">Extraction summary</h2>
+          </div>
+          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-800">
+            Verify details
+          </span>
+        </div>
+        <div className="grid gap-px bg-slate-100 sm:grid-cols-2">
+          <SummaryItem label="Amount" value={fields.amount ? `₦${Number(fields.amount).toLocaleString('en-NG')}` : '—'} strong />
+          <SummaryItem label="Transaction date" value={fields.date || '—'} mono />
+          <SummaryItem label="Time · 24 hour" value={fields.time || '—'} mono />
+          <SummaryItem label="Bank" value={fields.bank || '—'} />
+          <div className="bg-white px-5 py-3.5 sm:col-span-2 sm:px-6">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Reference</p>
+            <p className="mt-1 break-all font-mono text-sm font-medium tracking-tight text-slate-900">{fields.reference || '—'}</p>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.04)] sm:p-6">
+        <div className="mb-5">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Edit extracted fields</p>
+          <p className="mt-1 text-sm text-slate-600">These details stay editable. Please check them against your alert.</p>
+        </div>
+        <div className="grid grid-cols-1 gap-x-5 gap-y-5 sm:grid-cols-2">
+          <Input
+            label="Amount (NGN)"
+            id="amount"
+            value={fields.amount}
+            onChange={(e) => setFields({ ...fields, amount: e.target.value })}
+            className="font-mono tabular-nums"
+            error={errors.find((e) => e.field === 'amount')?.message}
+          />
+          <Input
+            label="Date"
+            type="date"
+            id="date"
+            value={fields.date}
+            onChange={(e) => setFields({ ...fields, date: e.target.value })}
+            className="font-mono tabular-nums"
+            error={errors.find((e) => e.field === 'date')?.message}
+          />
+          <Input
+            label="Time (24-hour)"
+            type="time"
+            id="time"
+            value={fields.time}
+            onChange={(e) => setFields({ ...fields, time: e.target.value })}
+            className="font-mono tabular-nums"
+            error={errors.find((e) => e.field === 'time')?.message}
+          />
+          <Select
+            label="Channel"
+            id="channel"
+            value={fields.channel}
+            onChange={(e) => setFields({ ...fields, channel: e.target.value as ParsedFields['channel'] })}
+            error={errors.find((e) => e.field === 'channel')?.message}
+          >
+            <option value="">Choose a channel</option>
+            {CHANNELS.map((c) => (
+              <option key={c.key} value={c.key}>
+                {c.label}
+              </option>
+            ))}
+          </Select>
+          <div className="flex flex-col">
+            <label htmlFor="bank" className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-600">
+              Bank
+            </label>
+            {bankUnknown && banks ? (
+              <>
+                <Select
+                  id="bank"
+                  value={bankMatch ? bankMatch.name : ''}
+                  onChange={(e) => setFields({ ...fields, bank: e.target.value })}
+                  error={errors.find((e) => e.field === 'bank')?.message}
+                >
+                  <option value="">Choose your bank</option>
+                  {banks.map((b) => (
+                    <option key={b.key} value={b.name}>
+                      {b.name}
+                    </option>
+                  ))}
+                  <option value="__other__">Another bank — I’ll type it</option>
+                </Select>
+                {fields.bank === '__other__' && (
+                  <Input
+                    id="bank-other"
+                    label="Bank name"
+                    value={fields.bank}
+                    onChange={(e) => setFields({ ...fields, bank: e.target.value })}
+                  />
+                )}
+              </>
+            ) : (
+              <Input
                 id="bank"
-                value={bankMatch ? bankMatch.name : ''}
+                value={fields.bank}
                 onChange={(e) => setFields({ ...fields, bank: e.target.value })}
                 error={errors.find((e) => e.field === 'bank')?.message}
-              >
-                <option value="">Choose your bank</option>
-                {banks.map((b) => (
-                  <option key={b.key} value={b.name}>
-                    {b.name}
-                  </option>
-                ))}
-                <option value="__other__">Another bank — I’ll type it</option>
-              </Select>
-              {fields.bank === '__other__' && (
-                <Input
-                  id="bank-other"
-                  label="Bank name"
-                  value={fields.bank}
-                  onChange={(e) => setFields({ ...fields, bank: e.target.value })}
-                />
-              )}
-            </>
-          ) : (
-            <Input
-              id="bank"
-              value={fields.bank}
-              onChange={(e) => setFields({ ...fields, bank: e.target.value })}
-              error={errors.find((e) => e.field === 'bank')?.message}
-            />
-          )}
-        </div>
-        <div className="flex flex-col">
-          <label htmlFor="reference" className="block text-sm font-medium text-[var(--ink)] mb-1.5">
-            Reference
-          </label>
+              />
+            )}
+          </div>
           <Input
+            label="Reference"
             id="reference"
             value={fields.reference}
             onChange={(e) => setFields({ ...fields, reference: e.target.value })}
+            className="font-mono tracking-tight"
             error={errors.find((e) => e.field === 'reference')?.message}
           />
         </div>
-      </div>
 
-      <div className="mt-6 flex flex-col gap-2">
-        <Checkbox
-          id="match-check"
-          label="These match my alert."
-          hint="Only continue when the amount, date, time, channel, bank and reference are correct."
-        />
-      </div>
+        <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+          <Checkbox
+            id="match-check"
+            label="These details match my alert."
+            hint="Confirm the amount, date, time, channel, bank and reference before moving on."
+          />
+        </div>
 
-      <div className="mt-8 flex gap-3">
-        <Button onClick={continueToProblem}>Continue</Button>
-      </div>
+        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:items-center">
+          <Button onClick={continueToProblem}>Continue</Button>
+          <p className="text-xs leading-5 text-slate-500">
+            Missing fields can still be entered manually.
+          </p>
+        </div>
+      </section>
 
-      <p className="mt-6 text-xs text-[var(--muted)] max-w-[65ch]">
-        Missing fields are highlighted above. You can still continue and correct them on the next screens; the
-        complaint works best when every field is filled in.
-      </p>
     </Layout>
+  )
+}
+
+function SummaryItem({ label, value, mono, strong }: { label: string; value: string; mono?: boolean; strong?: boolean }) {
+  return (
+    <div className="bg-white px-5 py-3.5 sm:px-6">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{label}</p>
+      <p className={`mt-1 truncate text-sm text-slate-900 ${
+        mono ? 'font-mono tracking-tight tabular-nums' : ''
+      } ${strong ? 'text-lg font-semibold' : 'font-medium'}`}>
+        {value}
+      </p>
+    </div>
   )
 }

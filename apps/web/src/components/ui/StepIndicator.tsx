@@ -3,12 +3,64 @@ interface StepIndicatorProps {
   total: number
 }
 
+const FLOW_STEPS = [
+  'Add alert',
+  'Verify details',
+  'Choose issue',
+  'Review & send',
+]
+
 export function StepIndicator({ step, total }: StepIndicatorProps) {
+  const steps = FLOW_STEPS.slice(0, total)
   return (
-    <div className="mb-8">
-      <p className="text-sm text-[var(--muted)]">
-        Step {step} of {total}
-      </p>
-    </div>
+    <nav aria-label="Complaint progress" className="mb-9 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.04)] sm:mb-10 sm:p-5">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Your complaint</p>
+        <p className="font-mono text-xs font-medium tabular-nums text-slate-600">
+          <span className="text-indigo-700">{String(step).padStart(2, '0')}</span>
+          <span className="mx-1.5 text-slate-400">/</span>
+          {String(total).padStart(2, '0')}
+        </p>
+      </div>
+      <ol className="flex items-start">
+        {steps.map((label, index) => {
+          const number = index + 1
+          const complete = number < step
+          const current = number === step
+          return (
+            <li
+              key={label}
+              aria-current={current ? 'step' : undefined}
+              className={`relative flex min-w-0 flex-1 items-start gap-2.5 ${number < steps.length ? 'pr-2 sm:pr-4' : ''}`}
+            >
+              {number < steps.length && (
+                <span
+                  aria-hidden="true"
+                  className={`absolute left-7 right-1 top-3.5 h-px sm:left-8 sm:right-2 ${
+                    complete ? 'bg-indigo-500' : 'bg-slate-200'
+                  }`}
+                />
+              )}
+              <span
+                className={`relative z-10 grid size-7 shrink-0 place-items-center rounded-full border text-[11px] font-semibold transition-colors sm:size-8 ${
+                  complete
+                    ? 'border-indigo-600 bg-indigo-600 text-white'
+                    : current
+                      ? 'border-indigo-600 bg-indigo-50 text-indigo-700 ring-4 ring-indigo-50'
+                      : 'border-slate-200 bg-white text-slate-500'
+                }`}
+              >
+                {String(number).padStart(2, '0')}
+              </span>
+              <span className={`relative z-10 pt-1 text-[10px] font-semibold leading-4 sm:text-xs ${
+                current ? 'text-slate-950' : complete ? 'text-slate-600' : 'text-slate-500'
+              }`}>
+                {label}
+              </span>
+            </li>
+          )
+        })}
+      </ol>
+    </nav>
   )
 }

@@ -8,14 +8,14 @@ export interface BannerProps {
 
 export function Banner({ kind, title, body }: BannerProps) {
   const styles: Record<string, string> = {
-    info: 'bg-[#eef3f5] border border-[#b9c6cc] text-[var(--ink)]',
-    error: 'bg-[#fbeeec] border border-[#e0b3ad] text-[var(--danger)]',
-    warn: 'bg-[#fff8e6] border border-[#e3cd8c] text-[#6b4f00]',
+    info: 'border-indigo-200 bg-indigo-50 text-indigo-950',
+    error: 'border-rose-200 bg-rose-50 text-rose-900',
+    warn: 'border-amber-200 bg-amber-50 text-amber-950',
   }
   return (
-    <div className={`rounded-md border p-4 ${styles[kind]}`}>
+    <div className={`my-4 rounded-xl border p-4 ${styles[kind]}`} role={kind === 'error' ? 'alert' : 'status'}>
       <h3 className="font-semibold">{title}</h3>
-      {body && <p className="mt-1.5 text-sm">{body}</p>}
+      {body && <p className="mt-1.5 text-sm leading-6">{body}</p>}
     </div>
   )
 }

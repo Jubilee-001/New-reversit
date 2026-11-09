@@ -17,7 +17,12 @@ import tempfile
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
 
-from app.parser_adapter import extract_text_from_image, parse_alert
+from app.parser_adapter import (
+    extract_text_from_image,
+    normalize_date,
+    normalize_time,
+    parse_alert,
+)
 from app.rate_limit import image_limiter, parse_limiter
 
 router = APIRouter(prefix="/api", tags=["parser"])
@@ -64,6 +69,23 @@ def _looks_like(ext: str, data: bytes) -> bool:
     return any(data.startswith(magic) for magic in MAGIC[ext])
 
 
+def _normalize_parse_response(result: dict) -> dict:
+    if result.get("error"):
+        return result
+
+    normalized = result.copy()
+    missing = []
+    for field, normalizer in (("date", normalize_date), ("time", normalize_time)):
+        value = normalizer(normalized.get(field))
+        if value is None:
+            missing.append(field)
+        else:
+            normalized[field] = value
+    if missing:
+        return {"error": "could_not_parse", "missing": missing}
+    return normalized
+
+
 @router.post("/parse-text")
 def parse_text(payload: ParseTextInput, request: Request):
     if not parse_limiter.allow(client_key(request)):
@@ -83,7 +105,7 @@ def parse_text(payload: ParseTextInput, request: Request):
         if not isinstance(result, dict):
             print("[parse-text] parser returned a non-dict payload")
             return {"error": "could_not_parse", "missing": ["text"]}
-        return result
+        return _normalize_parse_response(result)
     except Exception as exc:  # noqa: BLE001 - parser wrappers should never crash the FastAPI route.
         print(f"[parse-text] failed to parse alert: {exc}")
         return {"error": "could_not_parse", "missing": ["text"]}

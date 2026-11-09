@@ -6,6 +6,6 @@ those public functions so the web layer has a stable import location.
 """
 
 from image_input import extract_text_from_image
-from parse import parse_alert, parse_screenshot
+from parse import normalize_date, normalize_time, parse_alert, parse_screenshot
 
-__all__ = ["parse_alert", "parse_screenshot", "extract_text_from_image"]
+__all__ = ["extract_text_from_image", "normalize_date", "normalize_time", "parse_alert", "parse_screenshot"]
