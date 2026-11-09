@@ -114,6 +114,7 @@ export interface Draft {
   missing: string[];
   problemType: ProblemType | null;
   caseId: string | null;
+  apiError: string | null;
 }
 
 export interface ParseResult {

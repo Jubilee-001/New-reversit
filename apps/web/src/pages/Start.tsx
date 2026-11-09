@@ -24,6 +24,8 @@ const EXAMPLES: { label: string; text: string }[] = [
 
 type Mode = 'paste' | 'image'
 
+const PARSE_FAILURE_MESSAGE = "We couldn’t read this right now. Try again in a minute, or type the details yourself."
+
 export default function Start() {
   const [mode, setMode] = React.useState<Mode>('paste')
   const [text, setText] = React.useState('')
@@ -54,6 +56,7 @@ export default function Start() {
     try {
       const result = await parseText(text)
       setParseOk(!result.error)
+      const apiError = result.error ? PARSE_FAILURE_MESSAGE : null
       saveDraft({
         mode: 'paste',
         alertText: text,
@@ -67,13 +70,31 @@ export default function Start() {
           accountLast4: '',
         },
         missing: result.missing ?? [],
+        apiError,
+      })
+      if (result.error) {
+        setApiError(apiError)
+      }
+      navigate('/check')
+    } catch {
+      const apiError = PARSE_FAILURE_MESSAGE
+      setApiError(apiError)
+      saveDraft({
+        mode: 'paste',
+        alertText: text,
+        fields: {
+          amount: '',
+          date: '',
+          time: '',
+          channel: '',
+          bank: '',
+          reference: '',
+          accountLast4: '',
+        },
+        missing: [],
+        apiError,
       })
       navigate('/check')
-      if (result.error) {
-        setApiError("We couldn’t read this right now. Try again in a minute, or type the details yourself.")
-      }
-    } catch {
-      setApiError("We couldn’t read this right now. Try again in a minute, or type the details yourself.")
     } finally {
       setLoading(false)
     }
@@ -86,13 +107,33 @@ export default function Start() {
     try {
       const result = (await extractImageText(file)) as { text: string; error?: string }
       if ('error' in result && result.error) {
-        setApiError("We couldn’t read this right now. Try again in a minute, or type the details yourself.")
+        const apiError = PARSE_FAILURE_MESSAGE
+        setApiError(apiError)
+        saveDraft({
+          mode: 'image',
+          alertText: '',
+          extractedText: '',
+          fields: { amount: '', date: '', time: '', channel: '', bank: '', reference: '', accountLast4: '' },
+          missing: [],
+          apiError,
+        })
+        navigate('/check')
       } else {
         setExtractedText((result as { text: string }).text)
         setShowingExtracted(true)
       }
     } catch {
-      setApiError("We couldn’t read this right now. Try again in a minute, or type the details yourself.")
+      const apiError = PARSE_FAILURE_MESSAGE
+      setApiError(apiError)
+      saveDraft({
+        mode: 'image',
+        alertText: '',
+        extractedText: '',
+        fields: { amount: '', date: '', time: '', channel: '', bank: '', reference: '', accountLast4: '' },
+        missing: [],
+        apiError,
+      })
+      navigate('/check')
     } finally {
       setLoading(false)
     }
@@ -104,6 +145,7 @@ export default function Start() {
     setLoading(true)
     try {
       const result = await parseText(extractedText)
+      const apiError = result.error ? PARSE_FAILURE_MESSAGE : null
       saveDraft({
         mode: 'image',
         alertText: extractedText,
@@ -118,20 +160,38 @@ export default function Start() {
           accountLast4: '',
         },
         missing: result.missing ?? [],
+        apiError,
+      })
+      if (result.error) {
+        setApiError(apiError)
+      }
+      navigate('/check')
+    } catch {
+      const apiError = PARSE_FAILURE_MESSAGE
+      setApiError(apiError)
+      saveDraft({
+        mode: 'image',
+        alertText: extractedText,
+        extractedText,
+        fields: { amount: '', date: '', time: '', channel: '', bank: '', reference: '', accountLast4: '' },
+        missing: [],
+        apiError,
       })
       navigate('/check')
-      if (result.error) {
-        setApiError("We couldn’t read this right now. Try again in a minute, or type the details yourself.")
-      }
-    } catch {
-      setApiError("We couldn’t read this right now. Try again in a minute, or type the details yourself.")
     } finally {
       setLoading(false)
     }
   }
 
   const goManual = () => {
-    saveDraft({ mode: 'manual', alertText: text, fields: { amount: '', date: '', time: '', channel: '', bank: '', reference: '', accountLast4: '' } })
+    setApiError(null)
+    saveDraft({
+      mode: 'manual',
+      alertText: text,
+      fields: { amount: '', date: '', time: '', channel: '', bank: '', reference: '', accountLast4: '' },
+      missing: [],
+      apiError: null,
+    })
     navigate('/check')
   }
 

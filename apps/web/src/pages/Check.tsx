@@ -9,6 +9,7 @@ import { routeTitle, navigate } from '@/router'
 import { getConfig } from '@/lib/api'
 import type { ParsedFields } from '@/lib/types'
 import { getDraft, saveDraft } from '@/lib/draft'
+import { Banner } from '@/components/ui/Banner'
 
 const CHANNELS: { key: string; label: string }[] = [
   { key: 'atm', label: 'ATM cash withdrawal' },
@@ -81,6 +82,10 @@ export default function Check() {
   return (
     <Layout title={routeTitle('/check')} step={{ step: 2, total: 4 }}>
       <ErrorSummary errors={errors} />
+
+      {draft.apiError && (
+        <Banner kind="error" title={draft.apiError} body={<>You can still type the details yourself below.</>} />
+      )}
 
       <h1 className="text-2xl font-semibold">Check the details</h1>
       <p className="mt-2 max-w-[65ch] text-[var(--muted)]">

@@ -10,6 +10,7 @@ export interface StoredDraft {
   missing: string[]
   problemType: Draft['problemType']
   caseId: string | null
+  apiError: string | null
 }
 
 export function saveDraft(draft: Partial<StoredDraft> & { mode?: StoredDraft['mode'] }): void {
@@ -23,6 +24,7 @@ export function saveDraft(draft: Partial<StoredDraft> & { mode?: StoredDraft['mo
       missing: draft.missing ?? existing.missing,
       problemType: draft.problemType ?? existing.problemType,
       caseId: draft.caseId ?? existing.caseId,
+      apiError: draft.apiError ?? existing.apiError ?? null,
     }
     sessionStorage.setItem(DRAFT_KEY, JSON.stringify(next))
   } catch {
@@ -43,6 +45,7 @@ export function getDraft(): StoredDraft {
       missing: Array.isArray(parsed.missing) ? parsed.missing : [],
       problemType: parsed.problemType ?? null,
       caseId: parsed.caseId ?? null,
+      apiError: typeof parsed.apiError === 'string' ? parsed.apiError : null,
     }
   } catch {
     return emptyDraft()
@@ -66,6 +69,7 @@ function emptyDraft(): StoredDraft {
     missing: [],
     problemType: null,
     caseId: null,
+    apiError: null,
   }
 }
 
