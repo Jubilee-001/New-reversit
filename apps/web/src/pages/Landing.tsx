@@ -132,6 +132,17 @@ export default function Landing() {
             </a>
           </div>
         </div>
+        <nav aria-label="Section navigation" className="mx-auto flex min-h-11 max-w-7xl items-center justify-center gap-1 border-t border-slate-100 px-3 md:hidden">
+          <a href="#how-it-works" className="inline-flex min-h-10 items-center rounded-lg px-3 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950">
+            How it works
+          </a>
+          <a href="#timelines" className="inline-flex min-h-10 items-center rounded-lg px-3 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950">
+            CBN timelines
+          </a>
+          <a href="/cases" className="inline-flex min-h-10 items-center rounded-lg px-3 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950">
+            My cases
+          </a>
+        </nav>
       </header>
 
       <main>
