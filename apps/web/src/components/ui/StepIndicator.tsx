@@ -28,31 +28,29 @@ export function StepIndicator({ step, total }: StepIndicatorProps) {
           const complete = number < step
           const current = number === step
           return (
-            <li
-              key={label}
-              aria-current={current ? 'step' : undefined}
-              className={`relative flex min-w-0 flex-1 items-start gap-2.5 ${number < steps.length ? 'pr-2 sm:pr-4' : ''}`}
-            >
-              {number < steps.length && (
+            <li key={label} aria-current={current ? 'step' : undefined} className="min-w-0 flex-1">
+              <div className="flex items-center">
                 <span
-                  aria-hidden="true"
-                  className={`absolute left-7 right-1 top-3.5 h-px sm:left-8 sm:right-2 ${
-                    complete ? 'bg-indigo-500' : 'bg-slate-200'
+                  className={`grid size-7 shrink-0 place-items-center rounded-full border text-[11px] font-semibold transition-colors sm:size-8 ${
+                    complete
+                      ? 'border-indigo-600 bg-indigo-600 text-white'
+                      : current
+                        ? 'border-indigo-600 bg-indigo-50 text-indigo-700 ring-4 ring-indigo-50'
+                        : 'border-slate-200 bg-white text-slate-500'
                   }`}
-                />
-              )}
-              <span
-                className={`relative z-10 grid size-7 shrink-0 place-items-center rounded-full border text-[11px] font-semibold transition-colors sm:size-8 ${
-                  complete
-                    ? 'border-indigo-600 bg-indigo-600 text-white'
-                    : current
-                      ? 'border-indigo-600 bg-indigo-50 text-indigo-700 ring-4 ring-indigo-50'
-                      : 'border-slate-200 bg-white text-slate-500'
-                }`}
-              >
-                {String(number).padStart(2, '0')}
-              </span>
-              <span className={`relative z-10 pt-1 text-[10px] font-semibold leading-4 sm:text-xs ${
+                >
+                  {String(number).padStart(2, '0')}
+                </span>
+                {number < steps.length && (
+                  <span
+                    aria-hidden="true"
+                    className={`mx-1.5 h-px flex-1 sm:mx-2 ${
+                      complete ? 'bg-indigo-500' : 'bg-slate-200'
+                    }`}
+                  />
+                )}
+              </div>
+              <span className={`mt-2 block pr-1 text-[10px] font-semibold leading-4 sm:text-xs ${
                 current ? 'text-slate-950' : complete ? 'text-slate-600' : 'text-slate-500'
               }`}>
                 {label}

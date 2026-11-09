@@ -95,10 +95,13 @@ export default function Problem() {
     <Layout title={routeTitle('/problem')} step={{ step: 3, total: 4 }}>
       <ErrorSummary errors={errors} />
 
-      <h1 className="text-2xl font-semibold">What went wrong</h1>
-      <p className="mt-2 max-w-[65ch] text-[var(--muted)]">
-        Choose the one option that fits. The timeline shown is the CBN window that applies to that problem.
-      </p>
+      <div className="mb-7 max-w-2xl">
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-indigo-700">Issue details</p>
+        <h1 className="text-3xl font-semibold tracking-tight text-slate-950">What went wrong?</h1>
+        <p className="mt-2 text-slate-600">
+          Choose the option that best describes your transaction. We’ll show the relevant CBN response window.
+        </p>
+      </div>
 
       <RadioGroup
         name="problem"

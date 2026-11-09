@@ -214,52 +214,89 @@ export default function Complaint() {
       )}
 
       {loading ? (
-        <p className="text-[var(--muted)]">Creating your case…</p>
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm" role="status">
+          Creating your case…
+        </div>
       ) : record ? (
         <>
-          <h1 className="text-2xl font-semibold">Review and send</h1>
-          <p className="mt-2 max-w-[65ch] text-[var(--muted)]">
-            Check the complaint, correct anything, and send it from your own email. Your bank’s dispute address is
-            shown below — check it on your bank’s website before sending.
-          </p>
-
-          <Textarea
-            label="Complaint to your bank"
-            id="complaint"
-            value={complaintText}
-            onChange={(e) => setComplaintText(e.target.value)}
-            onBlur={(e) => void saveField('complaint_text', e.target.value)}
-            error={errors.find((e) => e.field === 'complaint_text')?.message}
-            rows={14}
-          />
-
-          <div className="mt-6">
-            <Input
-              label="Send to (bank’s dispute email address)"
-              id="to-email"
-              type="email"
-              value={toEmail}
-              onChange={(e) => setToEmail(e.target.value)}
-              onBlur={(e) => void saveField('to_email', e.target.value)}
-              error={errors.find((e) => e.field === 'to_email')?.message}
-            />
-            {bank && !bank.verified && (
-              <p className="mt-2 text-xs text-[var(--muted)]">
-                Check this address on {bank.name}’s website before sending.
-              </p>
-            )}
-            {!bank && (
-              <p className="mt-2 text-xs text-[var(--muted)]">
-                We don’t have a dispute address for this bank. Type the address from your bank’s website.
-              </p>
-            )}
+          <div className="mb-7 max-w-2xl">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-indigo-700">Final review</p>
+            <h1 className="text-3xl font-semibold tracking-tight text-slate-950">Review and send</h1>
+            <p className="mt-2 text-slate-600">
+              Review the transaction record and complaint, then send it from your own email. Confirm the bank address on its official website.
+            </p>
           </div>
 
-          <p className="mt-6 text-xs text-[var(--muted)]">
-            Attach your alert screenshot before sending, if you have one.
-          </p>
+          {/* UX: keeps the transaction identifiers visible while the user reviews and dispatches the complaint. */}
+          <section aria-label="Transaction summary" className="mb-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Transaction record</p>
+                <h2 className="mt-1 font-semibold text-slate-950">{record.bank_name}</h2>
+              </div>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-mono text-[10px] font-semibold text-slate-600">
+                {record.channel.toUpperCase()}
+              </span>
+            </div>
+            <dl className="grid gap-px bg-slate-100 sm:grid-cols-2">
+              <div className="bg-white px-5 py-3.5">
+                <dt className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Amount</dt>
+                <dd className="mt-1 font-mono text-lg font-semibold tracking-tight tabular-nums text-slate-950">
+                  ₦{Number(record.amount).toLocaleString('en-NG')}
+                </dd>
+              </div>
+              <div className="bg-white px-5 py-3.5">
+                <dt className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Date &amp; time</dt>
+                <dd className="mt-1 font-mono text-sm font-medium tracking-tight tabular-nums text-slate-900">
+                  {record.txn_date} · {record.txn_time}
+                </dd>
+              </div>
+              <div className="bg-white px-5 py-3.5 sm:col-span-2">
+                <dt className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Reference</dt>
+                <dd className="mt-1 break-all font-mono text-sm font-medium tracking-tight text-slate-900">{record.reference}</dd>
+              </div>
+            </dl>
+          </section>
 
-          <div className="mt-8 flex flex-wrap gap-3">
+          <section className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.04)] sm:p-6">
+            <Textarea
+              label="Complaint to your bank"
+              id="complaint"
+              value={complaintText}
+              onChange={(e) => setComplaintText(e.target.value)}
+              onBlur={(e) => void saveField('complaint_text', e.target.value)}
+              error={errors.find((e) => e.field === 'complaint_text')?.message}
+              rows={14}
+              className="bg-slate-50/70 font-serif leading-7 focus:bg-white"
+            />
+
+            <div>
+              <Input
+                label="Send to (bank’s dispute email address)"
+                id="to-email"
+                type="email"
+                value={toEmail}
+                onChange={(e) => setToEmail(e.target.value)}
+                onBlur={(e) => void saveField('to_email', e.target.value)}
+                error={errors.find((e) => e.field === 'to_email')?.message}
+              />
+              {bank && !bank.verified && (
+                <p className="mt-2 text-xs leading-5 text-amber-900">
+                  Check this address on {bank.name}’s website before sending.
+                </p>
+              )}
+              {!bank && (
+                <p className="mt-2 text-xs leading-5 text-slate-600">
+                  We don’t have a dispute address for this bank. Type the address from your bank’s website.
+                </p>
+              )}
+            </div>
+
+            <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-600">
+              Attach your alert screenshot before sending, if you have one.
+            </p>
+
+          <div className="flex flex-wrap gap-3">
             <Button onClick={() => void openMail('mailto')}>
               Email to my bank
             </Button>
@@ -276,10 +313,11 @@ export default function Complaint() {
               Print or save as PDF
             </Button>
           </div>
+          </section>
 
           {returnBanner && (
-            <div className="mt-10 border-t border-[var(--line)] pt-8">
-              <h2 className="font-semibold mb-3">Did you send your complaint?</h2>
+            <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-5 sm:p-6">
+              <h2 className="mb-3 font-semibold tracking-tight text-emerald-950">Did you send your complaint?</h2>
               <div className="space-y-3">
                 <Button onClick={confirmSentNow}>Yes, just now</Button>
                 <Button variant="secondary" onClick={() => setShowSentEarlier(true)}>

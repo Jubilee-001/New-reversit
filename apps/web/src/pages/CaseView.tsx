@@ -129,10 +129,17 @@ export default function CaseView({ params }: { params?: { id: string } }) {
   }
 
   const { hours, passed } = countdown
-  const deadlineProgress = record.sent_at && record.deadline_at
-    ? Math.max(0, Math.min(100, ((Date.now() - new Date(record.sent_at).getTime()) /
-      (new Date(record.deadline_at).getTime() - new Date(record.sent_at).getTime())) * 100))
+  const sentTime = record.sent_at ? new Date(record.sent_at).getTime() : Number.NaN
+  const deadlineTime = record.deadline_at ? new Date(record.deadline_at).getTime() : Number.NaN
+  const duration = deadlineTime - sentTime
+  const deadlineProgress = Number.isFinite(sentTime) && Number.isFinite(deadlineTime) && duration > 0 && hours !== null
+    ? Math.max(0, Math.min(100, ((duration - hours * 60 * 60 * 1000) / duration) * 100))
     : null
+  const statusTone = record.status === 'resolved'
+    ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+    : record.status === 'escalated'
+      ? 'border-rose-200 bg-rose-50 text-rose-800'
+      : 'border-indigo-200 bg-indigo-50 text-indigo-800'
   const deadlineTone = passed
     ? 'border-rose-200 bg-rose-50 text-rose-900'
     : hours !== null && hours <= 24
@@ -152,7 +159,7 @@ export default function CaseView({ params }: { params?: { id: string } }) {
               Created {formatWAT(record.created_at)} · {record.bank_name}
             </p>
           </div>
-          <span className={`inline-flex w-fit items-center rounded-full border px-3 py-1.5 text-xs font-semibold ${deadlineTone}`}>
+          <span className={`inline-flex w-fit items-center rounded-full border px-3 py-1.5 text-xs font-semibold ${statusTone}`}>
             {statusLabel[record.status]}
           </span>
         </div>
@@ -167,41 +174,41 @@ export default function CaseView({ params }: { params?: { id: string } }) {
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Activity</p>
           <h2 className="mt-1 text-lg font-semibold tracking-tight text-slate-950">Status timeline</h2>
         </div>
-      <ol className="list-none space-y-4 pl-0 text-slate-600">
-        {STATUS_ORDER.map((status) => {
-          const active = STATUS_ORDER.indexOf(status) <= STATUS_ORDER.indexOf(record.status)
-          let when: string | null = null
-          let noteLine: string | null = null
-          if (status === 'draft_ready') when = record.created_at
-          if (status === 'sent') when = record.sent_at
-          if (status === 'bank_replied') when = record.updated_at
-          if (status === 'resolved') when = record.resolved_at
-          if (status === 'escalated') when = record.escalated_at
-          if (status === 'sent' && record.sent_at_source) noteLine = `Counted from when you told us you sent it ({record.sent_at_source}).`
-          return (
-            <li key={status} className={`flex items-start gap-3.5 ${active ? 'text-slate-950' : 'text-slate-500'}`}>
-              <span className={`mt-0.5 grid size-7 shrink-0 place-items-center rounded-full border text-[10px] font-semibold ${
-                active ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-200 bg-white text-slate-500'
-              }`}>
-                {STATUS_ORDER.indexOf(status) + 1}
-              </span>
-              <div>
-                <span className={`text-sm font-semibold ${active ? 'text-slate-950' : 'text-slate-500'}`}>
-                  {statusLabel[status]}
+        <ol className="list-none space-y-4 pl-0 text-slate-600">
+          {STATUS_ORDER.map((status) => {
+            const active = STATUS_ORDER.indexOf(status) <= STATUS_ORDER.indexOf(record.status)
+            let when: string | null = null
+            let noteLine: string | null = null
+            if (status === 'draft_ready') when = record.created_at
+            if (status === 'sent') when = record.sent_at
+            if (status === 'bank_replied') when = record.updated_at
+            if (status === 'resolved') when = record.resolved_at
+            if (status === 'escalated') when = record.escalated_at
+            if (status === 'sent' && record.sent_at_source) noteLine = `Counted from when you told us you sent it (${record.sent_at_source}).`
+            return (
+              <li key={status} className={`flex items-start gap-3.5 ${active ? 'text-slate-950' : 'text-slate-500'}`}>
+                <span className={`mt-0.5 grid size-7 shrink-0 place-items-center rounded-full border text-[10px] font-semibold ${
+                  active ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-200 bg-white text-slate-500'
+                }`}>
+                  {STATUS_ORDER.indexOf(status) + 1}
                 </span>
-                {when && <span className="mt-0.5 block font-mono text-xs tabular-nums text-slate-500">{formatWAT(when)}</span>}
-                {noteLine && <span className="text-xs text-slate-600">{noteLine}</span>}
-                {status === 'bank_replied' && record.bank_ticket && (
-                  <span className="mt-0.5 block font-mono text-xs text-slate-500">Ticket: {record.bank_ticket}</span>
-                )}
-                {status === 'escalated' && record.escalation_tier && (
-                  <span className="mt-0.5 block text-xs text-slate-500">Escalation tier {record.escalation_tier}</span>
-                )}
-              </div>
-            </li>
-          )
-        })}
-      </ol>
+                <div>
+                  <span className={`text-sm font-semibold ${active ? 'text-slate-950' : 'text-slate-500'}`}>
+                    {statusLabel[status]}
+                  </span>
+                  {when && <span className="mt-0.5 block font-mono text-xs tabular-nums text-slate-500">{formatWAT(when)}</span>}
+                  {noteLine && <span className="text-xs text-slate-600">{noteLine}</span>}
+                  {status === 'bank_replied' && record.bank_ticket && (
+                    <span className="mt-0.5 block font-mono text-xs text-slate-500">Ticket: {record.bank_ticket}</span>
+                  )}
+                  {status === 'escalated' && record.escalation_tier && (
+                    <span className="mt-0.5 block text-xs text-slate-500">Escalation tier {record.escalation_tier}</span>
+                  )}
+                </div>
+              </li>
+            )
+          })}
+        </ol>
       </section>
 
       {record.deadline_at && (
@@ -271,21 +278,23 @@ export default function CaseView({ params }: { params?: { id: string } }) {
 
       {isSent && (
         <>
-          <div className="mt-10 border-t border-[var(--line)] pt-8">
-            <h2 className="font-semibold mb-3">Update your case</h2>
+          <section className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.04)] sm:p-6">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Case management</p>
+            <h2 className="mb-5 mt-1 text-lg font-semibold tracking-tight text-slate-950">Update your case</h2>
 
             <div className="mb-6">
-              <label className="block text-sm font-medium text-[var(--ink)] mb-1.5">Bank’s ticket number (optional)</label>
+              <label htmlFor="bank-ticket" className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-600">Bank’s ticket number (optional)</label>
               <Input
                 id="bank-ticket"
                 value={ticket}
                 onChange={(e) => setTicket(e.target.value)}
+                className="font-mono tracking-tight"
               />
-              <p className="mt-1 text-xs text-[var(--muted)]">The ticket or reference number your bank gave you.</p>
+              <p className="mt-1 text-xs text-slate-500">The ticket or reference number your bank gave you.</p>
             </div>
 
             <div className="mb-6">
-              <label className="block text-sm font-medium text-[var(--ink)] mb-1.5">Note (optional)</label>
+              <label htmlFor="notes" className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-slate-600">Note (optional)</label>
               <Textarea id="notes" value={note} onChange={(e) => setNote(e.target.value)} rows={3} />
             </div>
 
@@ -295,17 +304,17 @@ export default function CaseView({ params }: { params?: { id: string } }) {
               <Button variant="secondary" onClick={markResolved}>Mark resolved</Button>
               <Button variant="secondary" onClick={markEscalated}>Escalate</Button>
             </div>
-            <p className="mt-2 text-xs text-[var(--muted)]">
+            <p className="mt-2 text-xs text-slate-500">
               Escalation opens the escalation pack with the three tiers and pre-written messages.
             </p>
-          </div>
+          </section>
         </>
       )}
 
       {record.status === 'resolved' && (
-        <div className="mt-8 rounded-md border border-[var(--ok)] bg-[#f1f8f4] p-4">
-          <h2 className="font-semibold text-[var(--ok)]">Case resolved</h2>
-          <p className="mt-1 text-[var(--muted)]">Resolved {formatWAT(record.resolved_at)}.</p>
+        <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+          <h2 className="font-semibold text-emerald-900">Case resolved</h2>
+          <p className="mt-1 text-sm text-emerald-800">Resolved {formatWAT(record.resolved_at)}.</p>
         </div>
       )}
     </Layout>

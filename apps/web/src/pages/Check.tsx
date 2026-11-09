@@ -118,7 +118,7 @@ export default function Check() {
           </span>
         </div>
         <div className="grid gap-px bg-slate-100 sm:grid-cols-2">
-          <SummaryItem label="Amount" value={fields.amount ? `₦${Number(fields.amount).toLocaleString('en-NG')}` : '—'} strong />
+          <SummaryItem label="Amount" value={formatAmount(fields.amount)} strong />
           <SummaryItem label="Transaction date" value={fields.date || '—'} mono />
           <SummaryItem label="Time · 24 hour" value={fields.time || '—'} mono />
           <SummaryItem label="Bank" value={fields.bank || '—'} />
@@ -254,4 +254,9 @@ function SummaryItem({ label, value, mono, strong }: { label: string; value: str
       </p>
     </div>
   )
+}
+
+function formatAmount(value: string): string {
+  const amount = Number(value)
+  return value && Number.isFinite(amount) ? `₦${amount.toLocaleString('en-NG')}` : value || '—'
 }
