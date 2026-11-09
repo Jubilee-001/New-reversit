@@ -33,9 +33,10 @@ _CREDIT_PATTERN = re.compile(
 )
 _OUTGOING_PATTERN = re.compile(
     r"\b(?:debit(?:ed)?|dr|withdraw(?:n|al)?|spent|paid|purchase|payment|"
-    r"transfer\s+sent|sent\s+to)\b",
+    r"transfer\s+sent|transfer\s+to\s+(?:bank|account)|sent\s+to)\b",
     re.IGNORECASE,
 )
+_RECEIPT_PATTERN = re.compile(r"\btransaction\s+receipt\b", re.IGNORECASE)
 _CURRENCY = r"(?:ngn|₦|(?<![A-Za-z])n(?![A-Za-z]))"
 _DEBIT_AMOUNT_PATTERN = re.compile(
     r"\b(?:amt|amount|debit|dr|debited|spent|paid)\s*:?\s*"
@@ -135,6 +136,10 @@ def _parse_channel(text: str) -> str | None:
 
 
 def _parse_bank(text: str) -> str:
+    first_line = text.splitlines()[0] if text.splitlines() else ""
+    for keyword in sorted(KNOWN_BANKS, key=len, reverse=True):
+        if re.search(rf"(?<![A-Za-z0-9]){re.escape(keyword)}(?![A-Za-z0-9])", first_line, re.IGNORECASE):
+            return KNOWN_BANKS[keyword]
     for keyword in sorted(KNOWN_BANKS, key=len, reverse=True):
         if re.search(rf"(?<![A-Za-z0-9]){re.escape(keyword)}(?![A-Za-z0-9])", text, re.IGNORECASE):
             return KNOWN_BANKS[keyword]
@@ -155,10 +160,12 @@ def _parse_reference(text: str) -> str | None:
 
 
 def parse_with_regex(text: str) -> dict | None:
-    """Extract a complete outgoing transaction alert, or return None."""
+    """Extract available transaction fields from an alert or receipt."""
     if not isinstance(text, str) or not text.strip():
         return None
-    if _CREDIT_PATTERN.search(text) or not _OUTGOING_PATTERN.search(text):
+    if _CREDIT_PATTERN.search(text) or not (
+        _OUTGOING_PATTERN.search(text) or _RECEIPT_PATTERN.search(text)
+    ):
         return None
 
     amount = _parse_amount(text)
@@ -166,7 +173,7 @@ def parse_with_regex(text: str) -> dict | None:
     time = _parse_time(text)
     channel = _parse_channel(text)
     reference = _parse_reference(text)
-    if amount is None or date is None or time is None or channel is None or reference is None:
+    if all(value is None for value in (amount, date, time, channel, reference)):
         return None
 
     return {

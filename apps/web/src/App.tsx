@@ -9,6 +9,7 @@ import CaseView from '@/pages/CaseView'
 import CaseEscalate from '@/pages/CaseEscalate'
 import Cases from '@/pages/Cases'
 import { startRouter } from '@/router'
+import { ToastViewport } from '@/components/ui/ToastViewport'
 
 const PAGES: Record<string, React.ComponentType> = {
   '/': Landing,
@@ -28,19 +29,19 @@ export function App() {
     startRouter(setMatch)
   }, [])
 
+  let page: React.ReactNode
   if (!match) {
-    return <Layout title="ReverseIt" />
-  }
-
-  const Page = PAGES[match.route.path] as React.ComponentType<{ params: Record<string, string> }>
-  if (!Page) {
-    return (
+    page = <Layout title="ReverseIt" />
+  } else {
+    const Page = PAGES[match.route.path] as React.ComponentType<{ params: Record<string, string> }>
+    page = Page ? (
+      <Page params={match.params} />
+    ) : (
       <Layout title="Not found — ReverseIt">
-        <h1 className="text-2xl font-semibold">Page not found</h1>
+        <h1 className="font-['Plus_Jakarta_Sans'] text-2xl font-bold">Page not found</h1>
         <p className="mt-2 text-[var(--muted)]">The page you requested does not exist.</p>
       </Layout>
     )
   }
-
-  return <Page params={match.params} />
+  return <>{page}<ToastViewport /></>
 }

@@ -297,6 +297,23 @@ def test_parse_text_could_not_parse():
         assert resp.json()["error"] == "could_not_parse"
 
 
+def test_parse_text_preserves_partial_transaction_reference():
+    with patch("app.parser_api.parse_alert") as mock_parse:
+        mock_parse.return_value = {
+            "error": "could_not_parse",
+            "missing": ["date", "time"],
+            "amount": 10000.0,
+            "channel": "transfer",
+            "bank": "OPay",
+            "reference": "221231020422440454",
+        }
+        response = client.post("/api/parse-text", json={"text": "Transaction Reference 221231020422440454"})
+
+    assert response.status_code == 200
+    assert response.json()["reference"] == "221231020422440454"
+    assert response.json()["missing"] == ["date", "time"]
+
+
 def test_parse_text_empty():
     resp = client.post("/api/parse-text", json={"text": ""})
     assert resp.status_code == 200
@@ -312,6 +329,22 @@ def test_extract_image_text_success():
         )
         assert resp.status_code == 200
         assert resp.json()["text"] == "Account debited for NGN2,000.00"
+
+
+@pytest.mark.parametrize("failure", [None, RuntimeError("vision provider unavailable")])
+def test_extract_image_text_failure_returns_fallback(failure):
+    with patch("app.parser_api.extract_text_from_image") as mock_extract:
+        if isinstance(failure, Exception):
+            mock_extract.side_effect = failure
+        else:
+            mock_extract.return_value = failure
+        resp = client.post(
+            "/api/extract-image-text",
+            files={"file": ("alert.png", b"\x89PNG\r\n\x1a\n" + b"x" * 20, "image/png")},
+        )
+
+    assert resp.status_code == 200
+    assert resp.json() == {"text": "", "error": "could_not_read"}
 
 
 def test_extract_image_text_wrong_type():

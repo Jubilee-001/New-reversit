@@ -7,8 +7,31 @@ import { Banner } from '@/components/ui/Banner'
 import { getCase, bankReply, resolveCase, escalateCase } from '@/lib/api'
 import { formatWAT, countdownText } from '@/lib/dates'
 import type { CaseRecord } from '@/lib/types'
+import { AlertCircle, Building2, CheckCircle2 } from 'lucide-react'
 
 const STATUS_ORDER: string[] = ['draft_ready', 'sent', 'bank_replied', 'resolved', 'escalated']
+
+function RoadmapStage({ number, title, description, state }: { number: string; title: string; description: string; state: 'complete' | 'current' | 'upcoming' }) {
+  const tone = state === 'complete'
+    ? 'border-emerald-200 bg-emerald-50/60'
+    : state === 'current'
+      ? 'border-indigo-200 bg-indigo-50/60'
+      : 'border-slate-200 bg-white'
+  const label = state === 'complete' ? 'Complete' : state === 'current' ? 'Current step' : 'Next step'
+  const icon = state === 'complete'
+    ? <CheckCircle2 size={14} aria-hidden="true" />
+    : state === 'current'
+      ? <AlertCircle size={14} aria-hidden="true" />
+      : <Building2 size={14} aria-hidden="true" />
+
+  return (
+    <li className={`rounded-xl border p-4 ${tone}`}>
+      <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-600">{icon}{label}</span>
+      <p className="mt-2 text-sm font-semibold text-slate-900">Stage {number} · {title}</p>
+      <p className="mt-1 text-xs leading-5 text-slate-600">{description}</p>
+    </li>
+  )
+}
 
 export default function CaseView({ params }: { params?: { id: string } }) {
   const id = params?.id ?? ''
@@ -154,7 +177,7 @@ export default function CaseView({ params }: { params?: { id: string } }) {
         <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-indigo-700">Case record</p>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="text-3xl font-semibold tracking-tight text-slate-950">Your case</h1>
+            <h1 className="font-['Plus_Jakarta_Sans'] text-3xl font-extrabold tracking-tight text-slate-900">Your case</h1>
             <p className="mt-2 text-sm text-slate-600">
               Created {formatWAT(record.created_at)} · {record.bank_name}
             </p>
@@ -172,7 +195,7 @@ export default function CaseView({ params }: { params?: { id: string } }) {
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.04)] sm:p-6">
         <div className="mb-5">
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Activity</p>
-          <h2 className="mt-1 text-lg font-semibold tracking-tight text-slate-950">Status timeline</h2>
+          <h2 className="mt-1 font-['Plus_Jakarta_Sans'] text-lg font-bold tracking-tight text-slate-950">Status timeline</h2>
         </div>
         <ol className="list-none space-y-4 pl-0 text-slate-600">
           {STATUS_ORDER.map((status) => {
@@ -262,6 +285,51 @@ export default function CaseView({ params }: { params?: { id: string } }) {
               Add reminder (.ics)
             </Button>
           )}
+        </section>
+      )}
+
+      {record.sent_at && (
+        <section className="mt-5 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-indigo-700">Response and escalation guide</p>
+          <h2 className="mt-1 font-['Plus_Jakarta_Sans'] text-lg font-bold tracking-tight text-slate-900">What happens next</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            This clock uses the selected channel’s reference window and starts from the complaint send time you confirmed. It is a tracking aid, not a legal finding or a determination that your bank is in breach.
+          </p>
+
+          <details className="mt-4 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+            <summary className="cursor-pointer text-sm font-semibold text-slate-800">
+              CBN reference and source notes
+            </summary>
+            <div className="mt-3 space-y-2 border-t border-slate-200 pt-3 text-xs leading-5 text-slate-600">
+              <p><span className="font-semibold text-slate-800">Reference:</span> {record.deadline.source || 'No specific CBN source identified for this case.'}</p>
+              {record.deadline.note && <p>{record.deadline.note}</p>}
+              <p>The app’s reference data identifies expected response windows; it does not reproduce or interpret a complete legal excerpt. Check the latest CBN circulars and your bank’s current process.</p>
+            </div>
+          </details>
+
+          <ol className="mt-5 grid gap-3 md:grid-cols-3">
+            <RoadmapStage
+              number="01"
+              title="Your bank’s dispute desk"
+              description="Keep the complaint you sent and the bank’s ticket or acknowledgement."
+              state={record.status === 'draft_ready' ? 'current' : 'complete'}
+            />
+            <RoadmapStage
+              number="02"
+              title="Bank head-office follow-up"
+              description="Follow your bank’s complaints process if it does not acknowledge the complaint or its recorded response window has passed."
+              state={passed ? 'current' : 'upcoming'}
+            />
+            <RoadmapStage
+              number="03"
+              title="CBN Consumer Protection Department"
+              description="Use the CBN complaint guide after contacting your bank; general complaints may allow up to two weeks."
+              state={record.status === 'escalated' && (record.escalation_tier ?? 0) >= 3 ? 'current' : 'upcoming'}
+            />
+          </ol>
+          <p className="mt-3 text-[11px] leading-5 text-slate-500">
+            Escalation timing depends on the issue and the applicable guidance. There is no universal day-4/day-7 sequence in this case tracker.
+          </p>
         </section>
       )}
 

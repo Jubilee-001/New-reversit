@@ -1,4 +1,61 @@
+@import url("https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap");
 @import "tailwindcss";
+
+@keyframes mercury-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes mercury-glow {
+  0%,
+  100% {
+    opacity: 0.65;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes mercury-marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes mercury-progress-fill {
+  from {
+    width: 0;
+  }
+  to {
+    width: 38%;
+  }
+}
+
+.animate-float {
+  animation: mercury-float 6s ease-in-out infinite;
+}
+
+.animate-glow {
+  animation: mercury-glow 5s ease-in-out infinite;
+}
+
+.animate-marquee {
+  animation: mercury-marquee 32s linear infinite;
+}
+
+.marquee-container:hover .animate-marquee,
+.marquee-container:focus-within .animate-marquee {
+  animation-play-state: paused;
+}
+
+.animate-progress-fill {
+  animation: mercury-progress-fill 1.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
 
 :root {
   --canvas: #f8fafc;
@@ -64,35 +121,6 @@ input[type="reset"] {
 }
 
 @media (max-width: 640px) {
-  body {
-    padding-left: env(safe-area-inset-left);
-    padding-right: env(safe-area-inset-right);
-    padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-
-  main {
-    padding-left: env(safe-area-inset-left);
-    padding-right: env(safe-area-inset-right);
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-
-  header > div,
-  footer > div,
-  main > div,
-  main > section {
-    padding-left: max(1rem, env(safe-area-inset-left));
-    padding-right: max(1rem, env(safe-area-inset-right));
-  }
-
-  h1 {
-    font-size: 1.5rem;
-  }
-
-  h2 {
-    font-size: 1.25rem;
-  }
-
   .max-w-\[65ch\] {
     width: 100%;
   }
@@ -104,6 +132,13 @@ input[type="reset"] {
   *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+  }
+
+  .animate-float,
+  .animate-glow,
+  .animate-marquee,
+  .animate-progress-fill {
+    animation: none !important;
   }
 }
 

@@ -26,7 +26,7 @@ The app is now a customer-only complaint and deadline tracker for failed debits.
 - Deterministic complaint template (editable by the user)
 - Per-IP rate limiting (10/min), 4 MB image cap, magic-byte validation, temp file deleted immediately
 - Parser exposed over HTTP: `POST /api/parse-text`, `POST /api/extract-image-text`
-- `.env.example` with `GROQ_API_KEY`, `GROQ_MODEL`, `GROQ_MAX_TOKENS`, `WEB_ORIGIN`
+- `.env.example` with `GROQ_API_KEY`, separate `GROQ_TEXT_MODEL` and `GROQ_IMAGE_MODEL`, token limits, `WEB_ORIGIN`
 
 **Frontend (`apps/web/`)**
 - React 19 + Vite + Tailwind 4, single-page app with History-API router

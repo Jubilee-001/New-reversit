@@ -7,6 +7,7 @@ import { navigate, routeTitle } from '@/router'
 import { parseText, extractImageText } from '@/lib/api'
 import { saveDraft } from '@/lib/draft'
 import { ArrowRight, FileText, ImagePlus, LockKeyhole, UploadCloud } from 'lucide-react'
+import { notify } from '@/lib/toast'
 
 const EXAMPLES: { label: string; text: string }[] = [
   {
@@ -57,7 +58,8 @@ export default function Start() {
     try {
       const result = await parseText(text)
       setParseOk(!result.error)
-      const apiError = result.error ? PARSE_FAILURE_MESSAGE : null
+      const hasPartialFields = Boolean(result.amount || result.date || result.time || result.channel || result.bank || result.reference)
+      const apiError = result.error && !hasPartialFields ? PARSE_FAILURE_MESSAGE : null
       saveDraft({
         mode: 'paste',
         alertText: text,
@@ -104,6 +106,10 @@ export default function Start() {
   const handleUpload = async (file: File) => {
     setApiError(null)
     setErrors([])
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 4 * 1024 * 1024) {
+      notify('Invalid image. Upload a PNG, JPG or WEBP file up to 4 MB.', 'error')
+      return
+    }
     setLoading(true)
     try {
       const result = (await extractImageText(file)) as { text: string; error?: string }
@@ -143,10 +149,18 @@ export default function Start() {
   const useExtractedText = async () => {
     setText(extractedText)
     setShowingExtracted(false)
+    if (!extractedText.trim()) {
+      notify('Invalid image or missing reference. Try another image or enter the details manually.', 'error')
+      return
+    }
     setLoading(true)
     try {
       const result = await parseText(extractedText)
-      const apiError = result.error ? PARSE_FAILURE_MESSAGE : null
+      const hasPartialFields = Boolean(result.amount || result.date || result.time || result.channel || result.bank || result.reference)
+      const apiError = result.error && !hasPartialFields ? PARSE_FAILURE_MESSAGE : null
+      if (!result.reference?.trim()) {
+        notify('Transaction reference not found. Check the alert and enter it manually.', 'error')
+      }
       saveDraft({
         mode: 'image',
         alertText: extractedText,

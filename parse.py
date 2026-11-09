@@ -41,19 +41,18 @@ REASON_CODES = (
     "bad_image",
 )
 
-# The project's Groq account currently exposes `qwen/qwen3.8-27b`, while the old
-# llama names are stale or inaccessible on this account. Use the supported model
-# by default and keep a small compatibility fallback chain.
-TEXT_LLM_MODEL = os.getenv("GROQ_TEXT_MODEL") or os.getenv("GROQ_MODEL") or "qwen/qwen3.8-27b"
-LLM_MODEL = TEXT_LLM_MODEL
 LLM_MAX_TOKENS = int(os.getenv("GROQ_MAX_TOKENS", "400"))
 AI_CALL_LIMIT_PER_MINUTE = int(os.getenv("GROQ_RATE_LIMIT_PER_MINUTE", "6"))
 _AI_CALL_TIMES = deque()
 
 
-def _model_candidates(env_name: str, defaults: tuple[str, ...]) -> list[str]:
+def _text_model_candidates() -> list[str]:
     candidates: list[str] = []
-    for raw in (os.getenv(env_name), *defaults):
+    for raw in (
+        os.getenv("GROQ_TEXT_MODEL") or os.getenv("GROQ_MODEL"),
+        "qwen/qwen3.8-27b",
+        "openai/gpt-oss-120b",
+    ):
         model = (raw or "").strip()
         if model and model not in candidates:
             candidates.append(model)
@@ -62,7 +61,15 @@ def _model_candidates(env_name: str, defaults: tuple[str, ...]) -> list[str]:
 
 def _is_decommissioned_model_error(exc: Exception) -> bool:
     message = str(exc).lower()
-    return "decommissioned" in message or "no longer supported" in message or "model_decommissioned" in message
+    status_code = getattr(exc, "status_code", None)
+    return (
+        status_code == 404
+        or "model not found" in message
+        or "model does not exist" in message
+        or "decommissioned" in message
+        or "no longer supported" in message
+        or "model_decommissioned" in message
+    )
 
 # ---------------------------------------------------------------------
 # Normalizers (shared by regex path, LLM path and validator)
@@ -213,14 +220,9 @@ def parse_with_llm(text: str) -> dict | None:
         print("[Warning] GROQ_API_KEY not found in environment.")
         return {"_ai_error_reason": "ai_unavailable"}
 
-    kwargs = {}
-    effort = os.getenv("GROQ_REASONING_EFFORT")
-    if effort:
-        kwargs["reasoning_effort"] = effort
-
     client = Groq(api_key=api_key, timeout=15.0, max_retries=1)
     last_error: Exception | None = None
-    for model in _model_candidates("GROQ_TEXT_MODEL", ("qwen/qwen3.8-27b", "llama-3.3-70b-versatile")):
+    for model in _text_model_candidates():
         if not _ai_call_allowed():
             return {"_ai_error_reason": "ai_busy"}
         try:
@@ -230,10 +232,11 @@ def parse_with_llm(text: str) -> dict | None:
                     {"role": "user", "content": f"Alert text:\n{text}"},
                 ],
                 model=model,
-                temperature=0.0,
-                max_tokens=LLM_MAX_TOKENS,
+                temperature=0.7,
+                top_p=0.8,
+                max_completion_tokens=LLM_MAX_TOKENS,
                 response_format={"type": "json_object"},
-                **kwargs,
+                reasoning_effort=os.getenv("GROQ_REASONING_EFFORT") or "none",
             )
             result = _extract_json(completion.choices[0].message.content or "")
             if isinstance(result, dict):
@@ -480,6 +483,29 @@ def parse_alert_result(text: str) -> dict:
 
         llm_result = parse_with_llm(clean_text)
         if isinstance(llm_result, dict) and "_ai_error_reason" in llm_result:
+            if isinstance(regex_result, dict):
+                partial = dict(regex_result)
+                validate_extracted_data(partial)
+                fields = {
+                    field: partial[field]
+                    for field in REQUIRED_FIELDS
+                    if field in partial
+                    and partial[field] is not None
+                    and not (field == "bank" and partial[field] == DEFAULT_BANK)
+                }
+                missing = [field for field in REQUIRED_FIELDS if field not in fields]
+                result = {
+                    "ok": False,
+                    "fields": fields,
+                    "missing": missing,
+                    "reason": llm_result["_ai_error_reason"],
+                    "message": "Some transaction details could not be read. Review and complete the missing fields.",
+                    "source": "pattern",
+                    "warnings": warnings,
+                    "error": "could_not_parse",
+                }
+                result.update(fields)
+                return result
             return {
                 "ok": False,
                 "fields": {},
@@ -490,6 +516,12 @@ def parse_alert_result(text: str) -> dict:
                 "warnings": warnings,
                 "error": "could_not_parse",
             }
+
+        if isinstance(llm_result, dict) and isinstance(regex_result, dict):
+            llm_result = llm_result.copy()
+            for field in REQUIRED_FIELDS:
+                if not llm_result.get(field) and regex_result.get(field):
+                    llm_result[field] = regex_result[field]
 
         if not isinstance(llm_result, dict):
             return {
@@ -564,7 +596,13 @@ def parse_alert(text: str) -> dict:
     result = parse_alert_result(text)
     if result.get("ok"):
         return {k: result[k] for k in REQUIRED_FIELDS if k in result}
-    return {"error": "could_not_parse", "missing": result.get("missing", [])}
+    failure = {"error": "could_not_parse", "missing": result.get("missing", [])}
+    failure.update({
+        field: result[field]
+        for field in REQUIRED_FIELDS
+        if field in result and result[field] is not None
+    })
+    return failure
 
 
 def parse_screenshot_result(image_path: str) -> dict:

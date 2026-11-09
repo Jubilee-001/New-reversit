@@ -153,19 +153,16 @@ def extract_image_text(request: Request, file: UploadFile = File(...)) -> dict:
         text = extract_text_from_image(path)
     except Exception as exc:
         print(f"[extract-image-text] OCR failed: {exc}")
-        raise HTTPException(
-            status_code=502,
-            detail={"error": "could_not_read", "message": PROVIDER_ERROR_MESSAGE},
-        ) from exc
+        text = None
     finally:
         if path and os.path.exists(path):
-            os.unlink(path)
+            try:
+                os.unlink(path)
+            except OSError as exc:
+                print(f"[extract-image-text] temporary file cleanup failed: {exc}")
 
     if not text:
         print("[extract-image-text] OCR returned empty text")
-        raise HTTPException(
-            status_code=502,
-            detail={"error": "could_not_read", "message": PROVIDER_ERROR_MESSAGE},
-        )
+        return {"text": "", "error": "could_not_read"}
 
     return {"text": text}

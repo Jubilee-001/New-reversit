@@ -10,14 +10,29 @@ import { createCase, getCase, patchCase, mailOpened, confirmSent, getConfig } fr
 import { getDraft, saveDraft } from '@/lib/draft'
 import { buildSendLinks } from '@/lib/mailto'
 import { clampSentAt } from '@/lib/dates'
+import { saveCaseId } from '@/lib/storage'
+import { notify } from '@/lib/toast'
 import type { CaseRecord, Config } from '@/lib/types'
 
-const PROBLEM_LABELS: Record<string, string> = {
-  failed_transfer: 'failed transfer',
-  duplicate_debit: 'duplicate debit',
-  pos_web_failure: 'POS or web payment failure',
-  atm_failure: 'ATM cash not dispensed',
-  wrong_account: 'transfer sent to the wrong account',
+const DISPUTE_EMAILS: Record<string, string> = {
+  gtbank: 'complaints@gtbank.com',
+  'access bank': 'contactcenter@accessbankplc.com',
+  zenith: 'zenithdirect@zenithbank.com',
+  opay: 'support@opay-inc.com',
+  moniepoint: 'support@moniepoint.com',
+  kuda: 'help@kuda.com',
+  'first bank': 'firstcontact@firstbanknigeria.com',
+  uba: 'cfc@ubagroup.com',
+}
+
+function suggestedDisputeEmail(bankName: string): string {
+  const name = bankName.toLowerCase()
+  const entry = Object.entries(DISPUTE_EMAILS).find(([key]) => name.includes(key))
+  return entry?.[1] ?? ''
+}
+
+function formatAmount(amount: number): string {
+  return `₦${amount.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 export default function Complaint() {
@@ -38,8 +53,9 @@ export default function Complaint() {
   const bank = config?.banks?.find(
     (b: { key: string; name: string }) => b.key === record?.bank_key || b.name.toLowerCase() === record?.bank_name.toLowerCase(),
   )
-  const problemLabel = PROBLEM_LABELS[draft.problemType ?? ''] || draft.problemType || ''
-  const subject = `Dispute: ${problemLabel} NGN ${Number(record?.amount || 0).toLocaleString()} Ref ${record?.reference || ''}`
+  const amountText = formatAmount(Number(record?.amount || 0))
+  const circularLabel = record?.deadline.source.match(/CBN circular [^,;]+/i)?.[0] ?? 'CBN response window'
+  const subject = `URGENT: Failed ${record?.channel.toUpperCase() ?? 'payment'} debit of ${amountText} - Session ID: ${record?.reference || ''} - ${circularLabel}`
   const body = complaintText
 
   React.useEffect(() => {
@@ -48,16 +64,19 @@ export default function Complaint() {
       try {
         if (draft.caseId) {
           const rec = await getCase(draft.caseId)
+          saveCaseId(rec.id)
           setRecord(rec)
           setCaseId(draft.caseId)
           setComplaintText(rec.complaint_text)
-          setToEmail(rec.to_email)
+          setToEmail(rec.to_email || suggestedDisputeEmail(rec.bank_name))
         } else {
           setLoading(true)
+          const currentConfig = await getConfig()
+          setConfig(currentConfig)
           const rec = await createCase({
             problem_type: draft.problemType!,
             channel: draft.fields.channel,
-            bank_key: draft.fields.bank ? (config?.banks?.find((b: { key: string; name: string }) => b.name.toLowerCase() === draft.fields.bank.toLowerCase())?.key ?? null) : null,
+            bank_key: draft.fields.bank ? (currentConfig.banks?.find((b: { key: string; name: string }) => b.name.toLowerCase() === draft.fields.bank.toLowerCase())?.key ?? null) : null,
             bank_name: draft.fields.bank,
             amount: Number(draft.fields.amount) || 0,
             txn_date: draft.fields.date,
@@ -66,10 +85,12 @@ export default function Complaint() {
             account_last4: draft.fields.accountLast4 || null,
             to_email: '',
           })
+          saveCaseId(rec.id)
+          notify('Complaint drafted and saved to My Cases')
           setRecord(rec)
           setCaseId(rec.id)
           setComplaintText(rec.complaint_text)
-          setToEmail(rec.to_email)
+          setToEmail(rec.to_email || suggestedDisputeEmail(rec.bank_name))
           saveDraft({ caseId: rec.id })
         }
       } catch {
@@ -82,7 +103,7 @@ export default function Complaint() {
     return () => {
       mounted = false
     }
-  }, [draft.caseId, draft.problemType, draft.fields, config])
+  }, [draft.caseId, draft.problemType, draft.fields])
 
   React.useEffect(() => {
     void getConfig().then((cfg: Config) => setConfig(cfg)).catch(() => setConfig(null))
@@ -203,6 +224,22 @@ export default function Complaint() {
     window.print()
   }
 
+  const copyText = async (value: string, confirmation: string) => {
+    try {
+      await navigator.clipboard.writeText(value)
+      notify(confirmation)
+    } catch {
+      notify('Clipboard access is unavailable. Select and copy the text manually.', 'error')
+    }
+  }
+
+  const saveAndTrack = () => {
+    if (!caseId) return
+    saveCaseId(caseId)
+    notify('Complaint drafted and saved to My Cases')
+    navigate('/cases')
+  }
+
   return (
     <Layout title={routeTitle('/complaint')} step={{ step: 4, total: 4 }}>
       <ErrorSummary errors={errors} />
@@ -241,8 +278,8 @@ export default function Complaint() {
             <dl className="grid gap-px bg-slate-100 sm:grid-cols-2">
               <div className="bg-white px-5 py-3.5">
                 <dt className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Amount</dt>
-                <dd className="mt-1 font-mono text-lg font-semibold tracking-tight tabular-nums text-slate-950">
-                  ₦{Number(record.amount).toLocaleString('en-NG')}
+                <dd className="mt-1 font-['JetBrains_Mono'] text-lg font-semibold tracking-tight tabular-nums text-slate-950">
+                  {amountText}
                 </dd>
               </div>
               <div className="bg-white px-5 py-3.5">
@@ -258,7 +295,17 @@ export default function Complaint() {
             </dl>
           </section>
 
-          <section className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.04)] sm:p-6">
+          <section aria-label="Formal complaint letter and dispatch" className="mx-auto max-w-3xl rounded-xl border border-slate-200/80 bg-white p-6 font-['Instrument_Sans'] leading-relaxed shadow-[0_20px_50px_rgba(0,0,0,0.06)] sm:p-12">
+            <header className="mb-7 border-b border-slate-200 pb-5">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-indigo-700">Formal dispute letter</p>
+              <h2 className="mt-2 font-['Plus_Jakarta_Sans'] text-xl font-bold tracking-tight text-slate-900">Complaint to {record.bank_name}</h2>
+              <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
+                <LetterMetadata label="Date" value={new Intl.DateTimeFormat('en-NG', { dateStyle: 'long' }).format(new Date())} />
+                <LetterMetadata label="Customer bank" value={record.bank_name} />
+                <LetterMetadata label="Session ID / RRN" value={record.reference} mono />
+                <LetterMetadata label="Disputed amount" value={amountText} mono />
+              </dl>
+            </header>
             <Textarea
               label="Complaint to your bank"
               id="complaint"
@@ -267,7 +314,7 @@ export default function Complaint() {
               onBlur={(e) => void saveField('complaint_text', e.target.value)}
               error={errors.find((e) => e.field === 'complaint_text')?.message}
               rows={14}
-              className="bg-slate-50/70 font-serif leading-7 focus:bg-white"
+              className="bg-white font-['Instrument_Sans'] leading-7 focus:bg-white"
             />
 
             <div>
@@ -292,27 +339,33 @@ export default function Complaint() {
               )}
             </div>
 
-            <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-600">
-              Attach your alert screenshot before sending, if you have one.
+            <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-950">
+              Verify the recipient on your bank’s official website before sending. Attach your alert screenshot and any available transaction evidence.
             </p>
 
-          <div className="flex flex-wrap gap-3">
-            <Button onClick={() => void openMail('mailto')}>
-              Email to my bank
-            </Button>
-            <Button variant="secondary" onClick={() => void openMail('gmail')}>
-              Open Gmail
-            </Button>
-            <Button variant="secondary" onClick={() => navigator.clipboard.writeText(body).then(() => setMailCopied(true))}>
-              Copy complaint
-            </Button>
-            <Button variant="secondary" onClick={() => navigator.clipboard.writeText(toEmail || '').then(() => setMailCopied(true))}>
-              Copy bank email
-            </Button>
-            <Button variant="secondary" onClick={handlePrint}>
-              Print or save as PDF
-            </Button>
-          </div>
+            <div className="flex flex-wrap gap-3 border-t border-slate-100 pt-5">
+              <Button onClick={() => void copyText(body, 'Complaint text copied to clipboard')}>
+                Copy Text
+              </Button>
+              <Button variant="secondary" onClick={() => void copyText(record.reference, 'Session ID copied to clipboard')}>
+                Copy Session ID
+              </Button>
+              <Button onClick={() => void openMail('mailto')}>
+                Open in Email App
+              </Button>
+              <Button variant="secondary" onClick={saveAndTrack}>
+                Save &amp; Track Case
+              </Button>
+              <Button variant="secondary" onClick={() => void openMail('gmail')}>
+                Open Gmail
+              </Button>
+              <Button variant="secondary" onClick={() => void copyText(toEmail || '', 'Bank email copied to clipboard')}>
+                Copy bank email
+              </Button>
+              <Button variant="secondary" onClick={handlePrint}>
+                Print or save as PDF
+              </Button>
+            </div>
           </section>
 
           {returnBanner && (
@@ -355,5 +408,14 @@ export default function Complaint() {
         </>
       ) : null}
     </Layout>
+  )
+}
+
+function LetterMetadata({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{label}</dt>
+      <dd className={`mt-0.5 break-words text-slate-800 ${mono ? "font-['JetBrains_Mono'] text-xs font-medium tabular-nums" : 'text-sm font-medium'}`}>{value}</dd>
+    </div>
   )
 }
