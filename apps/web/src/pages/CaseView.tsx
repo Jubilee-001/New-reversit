@@ -4,10 +4,14 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Textarea } from '@/components/ui/Textarea'
 import { Banner } from '@/components/ui/Banner'
-import { getCase, bankReply, resolveCase, escalateCase } from '@/lib/api'
+import { getCase, bankReply, resolveCase, escalateCase, patchCase, deleteCase } from '@/lib/api'
 import { formatWAT, countdownText } from '@/lib/dates'
+import { buildSendLinks } from '@/lib/mailto'
+import { navigate } from '@/router'
+import { removeCaseId } from '@/lib/storage'
+import { notify } from '@/lib/toast'
 import type { CaseRecord } from '@/lib/types'
-import { AlertCircle, Building2, CheckCircle2 } from 'lucide-react'
+import { AlertCircle, Building2, CheckCircle2, ExternalLink, Trash2 } from 'lucide-react'
 
 const STATUS_ORDER: string[] = ['draft_ready', 'sent', 'bank_replied', 'resolved', 'escalated']
 
@@ -41,6 +45,13 @@ export default function CaseView({ params }: { params?: { id: string } }) {
   const [ticket, setTicket] = React.useState('')
   const [note, setNote] = React.useState('')
   const [countdown, setCountdown] = React.useState<{ hours: number | null; passed: boolean }>({ hours: null, passed: false })
+  const [showDraft, setShowDraft] = React.useState(false)
+  const [draftText, setDraftText] = React.useState('')
+  const [draftEmail, setDraftEmail] = React.useState('')
+  const [showDiscardConfirm, setShowDiscardConfirm] = React.useState(false)
+  const [savingDraft, setSavingDraft] = React.useState(false)
+  const [sending, setSending] = React.useState(false)
+  const [discarding, setDiscarding] = React.useState(false)
 
   React.useEffect(() => {
     let mounted = true
@@ -70,6 +81,88 @@ export default function CaseView({ params }: { params?: { id: string } }) {
   }, [record])
 
   const isSent = record?.status === 'sent'
+  const isDraft = record?.status === 'draft_ready'
+  const canResolve = record && ['sent', 'bank_replied', 'escalated'].includes(record.status)
+
+  const openDraft = () => {
+    if (!record) return
+    setDraftText(record.complaint_text)
+    setDraftEmail(record.to_email)
+    setShowDraft(true)
+  }
+
+  const saveDraft = async () => {
+    if (!record) return
+    setApiError(null)
+    setSavingDraft(true)
+    try {
+      const updated = await patchCase(record.id, { complaint_text: draftText, to_email: draftEmail })
+      setRecord(updated)
+      setShowDraft(false)
+    } catch {
+      setApiError("We couldn’t save your draft. Try again.")
+    } finally {
+      setSavingDraft(false)
+    }
+  }
+
+  const updateSentStatus = async (draft?: { complaintText: string; toEmail: string }) => {
+    if (!record) return false
+    setApiError(null)
+    setSending(true)
+    try {
+      const updated = await patchCase(record.id, {
+        status: 'sent',
+        ...(draft ? { complaint_text: draft.complaintText, to_email: draft.toEmail } : {}),
+      })
+      setRecord(updated)
+      setShowDraft(false)
+      return true
+    } catch {
+      setApiError("We couldn’t record that you sent the complaint. Try again.")
+      return false
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const sendComplaint = async () => {
+    if (!record) return
+    const recipient = record.to_email.trim()
+    if (!recipient) {
+      setApiError('Add the bank’s dispute email address in View / Edit Draft before sending.')
+      return
+    }
+    if (!await updateSentStatus()) return
+    const subject = `Complaint about failed ${record.channel.toUpperCase()} debit — ${record.reference}`
+    const links = buildSendLinks(recipient, subject, record.complaint_text)
+    const mailto = links.mailtoTooLong ? links.mailto.replace(/&body=.*$/, '') : links.mailto
+    if (links.mailtoTooLong) {
+      try {
+        await navigator.clipboard.writeText(record.complaint_text)
+        notify('Complaint copied. Paste it into the email body.')
+      } catch {
+        notify('The complaint is too long for the email link. Copy it from View / Edit Draft.', 'error')
+      }
+    }
+    window.location.href = mailto
+  }
+
+  const discardDraft = async () => {
+    if (!record) return
+    setApiError(null)
+    setDiscarding(true)
+    try {
+      await deleteCase(record.id)
+      removeCaseId(record.id)
+      notify('Draft discarded.')
+      navigate('/cases')
+    } catch {
+      setApiError("We couldn’t discard this draft. Try again.")
+    } finally {
+      setDiscarding(false)
+    }
+  }
 
   const markBankReplied = async () => {
     if (!record) return
@@ -182,15 +275,109 @@ export default function CaseView({ params }: { params?: { id: string } }) {
               Created {formatWAT(record.created_at)} · {record.bank_name}
             </p>
           </div>
-          <span className={`inline-flex w-fit items-center rounded-full border px-3 py-1.5 text-xs font-semibold ${statusTone}`}>
-            {statusLabel[record.status]}
-          </span>
+          <div className="flex flex-col items-start gap-3 sm:items-end">
+            {isDraft ? (
+              <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => void sendComplaint()}
+                  disabled={sending}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 disabled:cursor-wait disabled:opacity-60"
+                >
+                  {sending ? 'Sending…' : 'Send Complaint'}
+                  <ExternalLink size={16} aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  onClick={openDraft}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
+                >
+                  View / Edit Draft
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowDiscardConfirm(true)}
+                  className="inline-flex min-h-0 min-w-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
+                >
+                  <Trash2 size={14} aria-hidden="true" />
+                  Discard Draft
+                </button>
+              </div>
+            ) : canResolve ? (
+              <button
+                type="button"
+                onClick={() => void markResolved()}
+                className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700"
+              >
+                <CheckCircle2 size={16} aria-hidden="true" />
+                Mark as Resolved
+              </button>
+            ) : null}
+            <span className={`inline-flex w-fit items-center rounded-full border px-3 py-1.5 text-xs font-semibold ${statusTone}`}>
+              {statusLabel[record.status]}
+            </span>
+          </div>
         </div>
         <div className="mt-5 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-100 pt-4 text-xs text-slate-500">
           <span className="font-semibold uppercase tracking-wider">Case ID</span>
           <span className="font-mono tracking-tight tabular-nums text-slate-800">{record.id}</span>
         </div>
       </header>
+
+      {showDraft && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setShowDraft(false)
+        }}>
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="draft-dialog-title"
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-indigo-700">Draft complaint</p>
+                <h2 id="draft-dialog-title" className="mt-1 text-xl font-bold tracking-tight text-slate-950">Review your letter</h2>
+              </div>
+              <button type="button" onClick={() => setShowDraft(false)} aria-label="Close draft" className="rounded-lg px-3 py-1 text-xl text-slate-500 hover:bg-slate-100 hover:text-slate-900">×</button>
+            </div>
+            <label htmlFor="draft-recipient" className="mb-1.5 mt-5 block text-xs font-semibold uppercase tracking-wider text-slate-600">Bank dispute email</label>
+            <Input id="draft-recipient" type="email" value={draftEmail} onChange={(event) => setDraftEmail(event.target.value)} />
+            <label htmlFor="draft-letter" className="mb-1.5 mt-4 block text-xs font-semibold uppercase tracking-wider text-slate-600">Complaint letter</label>
+            <Textarea id="draft-letter" value={draftText} onChange={(event) => setDraftText(event.target.value)} rows={14} className="font-['Instrument_Sans'] leading-6" />
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button type="button" onClick={() => setShowDraft(false)} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Close</button>
+              <button type="button" onClick={() => void saveDraft()} disabled={savingDraft || !draftText.trim()} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+                {savingDraft ? 'Saving…' : 'Save draft'}
+              </button>
+              <button type="button" onClick={() => void updateSentStatus({ complaintText: draftText, toEmail: draftEmail })} disabled={sending} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">
+                <CheckCircle2 size={16} aria-hidden="true" />
+                I’ve sent it
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {showDiscardConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
+          <section role="alertdialog" aria-modal="true" aria-labelledby="discard-dialog-title" className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl sm:p-6">
+            <div className="flex items-start gap-3">
+              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-rose-50 text-rose-600"><Trash2 size={18} aria-hidden="true" /></span>
+              <div>
+                <h2 id="discard-dialog-title" className="font-semibold text-slate-950">Discard this draft?</h2>
+                <p className="mt-1 text-sm leading-6 text-slate-600">This will remove the transaction record from your cases.</p>
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => setShowDiscardConfirm(false)} disabled={discarding} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button type="button" onClick={() => void discardDraft()} disabled={discarding} className="rounded-xl bg-rose-700 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-800 disabled:opacity-50">
+                {discarding ? 'Discarding…' : 'Discard draft'}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.04)] sm:p-6">
         <div className="mb-5">
@@ -369,7 +556,6 @@ export default function CaseView({ params }: { params?: { id: string } }) {
             <Button onClick={markBankReplied}>Mark bank replied</Button>
 
             <div className="mt-6 flex gap-3">
-              <Button variant="secondary" onClick={markResolved}>Mark resolved</Button>
               <Button variant="secondary" onClick={markEscalated}>Escalate</Button>
             </div>
             <p className="mt-2 text-xs text-slate-500">

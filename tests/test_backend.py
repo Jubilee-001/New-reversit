@@ -166,6 +166,46 @@ def test_confirm_sent_rejects_non_draft():
         db.close()
 
 
+def test_patch_case_status_confirms_draft_as_sent():
+    db = SessionLocal()
+    try:
+        _make_case(db, status="draft_ready", case_id="tc-patch-sent")
+    finally:
+        db.close()
+
+    response = client.patch("/api/cases/tc-patch-sent", json={"status": "sent"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "sent"
+    assert body["sent_at"] is not None
+    assert body["deadline_at"] is not None
+
+
+def test_patch_case_status_rejects_transition_from_non_draft():
+    db = SessionLocal()
+    try:
+        _make_case(db, status="sent", case_id="tc-patch-nondraft")
+    finally:
+        db.close()
+
+    response = client.patch("/api/cases/tc-patch-nondraft", json={"status": "sent"})
+    assert response.status_code == 409
+
+
+def test_delete_case_only_allows_drafts():
+    db = SessionLocal()
+    try:
+        _make_case(db, status="draft_ready", case_id="tc-delete-draft")
+        _make_case(db, status="sent", case_id="tc-delete-sent")
+    finally:
+        db.close()
+
+    draft_response = client.delete("/api/cases/tc-delete-draft")
+    sent_response = client.delete("/api/cases/tc-delete-sent")
+    assert draft_response.status_code == 204
+    assert sent_response.status_code == 409
+
+
 def test_bank_reply_only_from_sent():
     db = SessionLocal()
     try:
@@ -192,6 +232,10 @@ def test_resolve_from_sent_or_bank_replied():
         case2 = _make_case(db, status="bank_replied", case_id="tc-res-br")
         updated2 = resolve(case2)
         assert updated2.status == "resolved"
+
+        case_escalated = _make_case(db, status="escalated", case_id="tc-res-escalated")
+        updated_escalated = resolve(case_escalated)
+        assert updated_escalated.status == "resolved"
 
         case3 = _make_case(db, status="draft_ready", case_id="tc-res-draft")
         with pytest.raises(TransitionError):

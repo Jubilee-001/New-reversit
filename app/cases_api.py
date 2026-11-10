@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -39,6 +41,8 @@ class CaseCreate(BaseModel):
 class CasePatch(BaseModel):
     complaint_text: str | None = None
     to_email: str | None = None
+    status: Literal["sent"] | None = None
+    sent_at: str | None = None
 
 
 class ConfirmSent(BaseModel):
@@ -97,6 +101,17 @@ def update_case(case_id: str, payload: CasePatch, db: Session = Depends(get_db))
         case.complaint_text = text[:20000]
     if payload.to_email is not None:
         case.to_email = payload.to_email.strip()[:200]
+    if payload.sent_at is not None and payload.status != "sent":
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "invalid_sent_at", "message": "A send time requires status sent."},
+        )
+    if payload.status == "sent":
+        try:
+            sent_at = parse_utc(payload.sent_at) if payload.sent_at else None
+            case = confirm_sent(case, sent_at=sent_at)
+        except TransitionError as exc:
+            fail(exc)
     db.commit()
     db.refresh(case)
     return case.to_dict()
@@ -105,6 +120,11 @@ def update_case(case_id: str, payload: CasePatch, db: Session = Depends(get_db))
 @router.delete("/cases/{case_id}", status_code=204)
 def delete_case(case_id: str, db: Session = Depends(get_db)):
     case = get_case(db, case_id)
+    if case.status != "draft_ready":
+        raise HTTPException(
+            status_code=409,
+            detail={"error": "case_not_draft", "message": "Only a draft case can be discarded."},
+        )
     db.delete(case)
     db.commit()
     return Response(status_code=204)

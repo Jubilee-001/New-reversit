@@ -6,6 +6,7 @@ import { ErrorSummary } from '@/components/ui/ErrorSummary'
 import { navigate, routeTitle } from '@/router'
 import { parseText, extractImageText } from '@/lib/api'
 import { saveDraft } from '@/lib/draft'
+import type { ParseResult } from '@/lib/types'
 import { ArrowRight, FileText, ImagePlus, LockKeyhole, UploadCloud } from 'lucide-react'
 import { notify } from '@/lib/toast'
 
@@ -28,6 +29,12 @@ type Mode = 'paste' | 'image'
 
 const PARSE_FAILURE_MESSAGE = "We couldn’t read this right now. Try again in a minute, or type the details yourself."
 
+function hasUsableParseData(result: ParseResult): boolean {
+  return Boolean(result.amount)
+    || [result.date, result.time, result.channel, result.bank, result.reference, result.session_id]
+      .some((value) => Boolean(value?.trim()))
+}
+
 export default function Start() {
   const [mode, setMode] = React.useState<Mode>('paste')
   const [text, setText] = React.useState('')
@@ -49,6 +56,7 @@ export default function Start() {
   const handlePaste = async (e: React.FormEvent) => {
     e.preventDefault()
     setApiError(null)
+    setParseOk(false)
     setErrors([])
     if (!text.trim()) {
       setErrors([{ field: 'text', message: 'Paste your debit alert text before continuing.' }])
@@ -57,9 +65,9 @@ export default function Start() {
     setLoading(true)
     try {
       const result = await parseText(text)
-      setParseOk(!result.error)
-      const hasPartialFields = Boolean(result.amount || result.date || result.time || result.channel || result.bank || result.reference)
-      const apiError = result.error && !hasPartialFields ? PARSE_FAILURE_MESSAGE : null
+      const hasUsableData = hasUsableParseData(result)
+      setParseOk(hasUsableData)
+      const apiError = hasUsableData ? null : PARSE_FAILURE_MESSAGE
       saveDraft({
         mode: 'paste',
         alertText: text,
@@ -69,15 +77,13 @@ export default function Start() {
           time: result.time ?? '',
           channel: (result.channel ?? '') as ('' | 'atm' | 'pos' | 'transfer' | 'web'),
           bank: result.bank ?? '',
-          reference: result.reference ?? '',
+          reference: result.reference ?? result.session_id ?? '',
           accountLast4: '',
         },
         missing: result.missing ?? [],
         apiError,
       })
-      if (result.error) {
-        setApiError(apiError)
-      }
+      setApiError(apiError)
       navigate('/check')
     } catch {
       const apiError = PARSE_FAILURE_MESSAGE
@@ -105,7 +111,9 @@ export default function Start() {
 
   const handleUpload = async (file: File) => {
     setApiError(null)
+    setParseOk(false)
     setErrors([])
+    saveDraft({ apiError: null })
     if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 4 * 1024 * 1024) {
       notify('Invalid image. Upload a PNG, JPG or WEBP file up to 4 MB.', 'error')
       return
@@ -113,7 +121,7 @@ export default function Start() {
     setLoading(true)
     try {
       const result = (await extractImageText(file)) as { text: string; error?: string }
-      if ('error' in result && result.error) {
+      if (!result.text?.trim()) {
         const apiError = PARSE_FAILURE_MESSAGE
         setApiError(apiError)
         saveDraft({
@@ -126,7 +134,7 @@ export default function Start() {
         })
         navigate('/check')
       } else {
-        setExtractedText((result as { text: string }).text)
+        setExtractedText(result.text)
         setShowingExtracted(true)
       }
     } catch {
@@ -147,6 +155,9 @@ export default function Start() {
   }
 
   const useExtractedText = async () => {
+    setApiError(null)
+    setParseOk(false)
+    saveDraft({ apiError: null })
     setText(extractedText)
     setShowingExtracted(false)
     if (!extractedText.trim()) {
@@ -156,9 +167,9 @@ export default function Start() {
     setLoading(true)
     try {
       const result = await parseText(extractedText)
-      const hasPartialFields = Boolean(result.amount || result.date || result.time || result.channel || result.bank || result.reference)
-      const apiError = result.error && !hasPartialFields ? PARSE_FAILURE_MESSAGE : null
-      if (!result.reference?.trim()) {
+      const hasUsableData = hasUsableParseData(result)
+      const apiError = hasUsableData ? null : PARSE_FAILURE_MESSAGE
+      if (!(result.reference ?? result.session_id)?.trim()) {
         notify('Transaction reference not found. Check the alert and enter it manually.', 'error')
       }
       saveDraft({
@@ -171,15 +182,13 @@ export default function Start() {
           time: result.time ?? '',
           channel: (result.channel ?? '') as ('' | 'atm' | 'pos' | 'transfer' | 'web'),
           bank: result.bank ?? '',
-          reference: result.reference ?? '',
+          reference: result.reference ?? result.session_id ?? '',
           accountLast4: '',
         },
         missing: result.missing ?? [],
         apiError,
       })
-      if (result.error) {
-        setApiError(apiError)
-      }
+      setApiError(apiError)
       navigate('/check')
     } catch {
       const apiError = PARSE_FAILURE_MESSAGE

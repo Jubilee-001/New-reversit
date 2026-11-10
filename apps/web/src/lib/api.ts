@@ -1,4 +1,4 @@
-import type { CaseRecord, Config } from '@/lib/types'
+import type { CaseRecord, Config, ParseResult } from '@/lib/types'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api'
 
@@ -72,7 +72,7 @@ export async function postFormData(path: string, formData: FormData): Promise<un
 // ----- Endpoints -----
 
 export function parseText(text: string) {
-  return postJson<{ amount?: number; date?: string; time?: string; channel?: string; bank?: string; reference?: string; error?: string; missing?: string[] }>('/parse-text', { text })
+  return postJson<ParseResult>('/parse-text', { text })
 }
 
 export function extractImageText(file: File) {
@@ -93,7 +93,7 @@ export function createCase(payload: {
   amount: number
   txn_date: string
   txn_time: string
-  reference: string
+  reference: string | null
   account_last4?: string | null
   to_email?: string | null
 }) {
@@ -104,7 +104,7 @@ export function getCase(id: string) {
   return getJson<CaseRecord>(`/cases/${encodeURIComponent(id)}`)
 }
 
-export function patchCase(id: string, patch: { complaint_text?: string; to_email?: string }) {
+export function patchCase(id: string, patch: { complaint_text?: string; to_email?: string; status?: 'sent'; sent_at?: string | null }) {
   return patchJson<CaseRecord>(`/cases/${encodeURIComponent(id)}`, patch)
 }
 

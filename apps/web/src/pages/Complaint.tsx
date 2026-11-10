@@ -6,13 +6,14 @@ import { Input } from '@/components/ui/Input'
 import { Banner } from '@/components/ui/Banner'
 import { ErrorSummary } from '@/components/ui/ErrorSummary'
 import { routeTitle, navigate } from '@/router'
-import { createCase, getCase, patchCase, mailOpened, confirmSent, getConfig } from '@/lib/api'
+import { createCase, getCase, patchCase, mailOpened, getConfig } from '@/lib/api'
 import { getDraft, saveDraft } from '@/lib/draft'
 import { buildSendLinks } from '@/lib/mailto'
 import { clampSentAt } from '@/lib/dates'
 import { saveCaseId } from '@/lib/storage'
 import { notify } from '@/lib/toast'
 import type { CaseRecord, Config } from '@/lib/types'
+import { ArrowRight } from 'lucide-react'
 
 const DISPUTE_EMAILS: Record<string, string> = {
   gtbank: 'complaints@gtbank.com',
@@ -35,75 +36,100 @@ function formatAmount(amount: number): string {
   return `₦${amount.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
+function formatDateForApi(value: string): string {
+  const trimmed = value.trim()
+  const iso = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`
+  const dayFirst = trimmed.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/)
+  if (dayFirst) return `${dayFirst[3]}-${dayFirst[2].padStart(2, '0')}-${dayFirst[1].padStart(2, '0')}`
+  return ''
+}
+
+function formatTimeForApi(value: string): string {
+  const trimmed = value.trim()
+  const time24 = trimmed.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/)
+  if (time24) return `${time24[1].padStart(2, '0')}:${time24[2]}`
+  const time12 = trimmed.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i)
+  if (!time12) return ''
+  const hour = Number(time12[1]) % 12 + (time12[3].toUpperCase() === 'PM' ? 12 : 0)
+  return `${String(hour).padStart(2, '0')}:${time12[2]}`
+}
+
+function buildReviewLetter(fields: ReturnType<typeof getDraft>['fields'], problemType: string | null): string {
+  const bankName = fields.bank.trim() || 'your bank'
+  const date = formatDateForApi(fields.date) || fields.date || '[transaction date]'
+  const time = formatTimeForApi(fields.time) || fields.time || '[transaction time]'
+  const amount = parseFloat(String(fields.amount).replace(/[^0-9.]/g, '')) || 0
+  const problem = problemType?.replace(/_/g, ' ') || 'failed transaction'
+  return [
+    `Dear ${bankName},`,
+    '',
+    'I am writing to formally complain about a debit on my account.',
+    '',
+    'Transaction details:',
+    `- Date and time: ${date} at ${time}`,
+    `- Amount: NGN ${amount.toFixed(2)}`,
+    `- Channel: ${fields.channel || '[payment channel]'}`,
+    `- Reference: ${fields.reference.trim() || '[transaction reference]'}`,
+    '',
+    `What went wrong: ${problem}.`,
+    '',
+    'Please investigate this transaction, correct the debit where appropriate, and acknowledge this complaint with a ticket or reference number.',
+    '',
+    'Thank you,',
+    '[Your name]',
+  ].join('\n')
+}
+
 export default function Complaint() {
+  const [draft] = React.useState(() => getDraft())
   const [caseId, setCaseId] = React.useState<string | null>(null)
   const [record, setRecord] = React.useState<CaseRecord | null>(null)
-  const [complaintText, setComplaintText] = React.useState('')
-  const [toEmail, setToEmail] = React.useState('')
+  const [complaintText, setComplaintText] = React.useState(() => buildReviewLetter(draft.fields, draft.problemType))
+  const [toEmail, setToEmail] = React.useState(() => suggestedDisputeEmail(draft.fields.bank))
   const [config, setConfig] = React.useState<Config | null>(null)
-  const [draft] = React.useState(() => getDraft())
   const [errors, setErrors] = React.useState<{ field: string; message: string }[]>([])
   const [apiError, setApiError] = React.useState<string | null>(null)
-  const [loading, setLoading] = React.useState(false)
+  const [loading, setLoading] = React.useState(() => Boolean(draft.caseId))
   const [showSentEarlier, setShowSentEarlier] = React.useState(false)
   const [sentAtLocal, setSentAtLocal] = React.useState('')
   const [mailCopied, setMailCopied] = React.useState(false)
   const [returnBanner, setReturnBanner] = React.useState(false)
 
+  const bankName = record?.bank_name ?? draft.fields.bank
+  const reference = record?.reference ?? draft.fields.reference
+  const channel = record?.channel ?? draft.fields.channel
+  const amount = record?.amount ?? (parseFloat(String(draft.fields.amount).replace(/[^0-9.]/g, '')) || 0)
+  const txnDate = record?.txn_date ?? formatDateForApi(draft.fields.date)
+  const txnTime = record?.txn_time ?? formatTimeForApi(draft.fields.time)
   const bank = config?.banks?.find(
-    (b: { key: string; name: string }) => b.key === record?.bank_key || b.name.toLowerCase() === record?.bank_name.toLowerCase(),
+    (item) => item.key === record?.bank_key || item.name.toLowerCase() === bankName.toLowerCase(),
   )
-  const amountText = formatAmount(Number(record?.amount || 0))
+  const amountText = formatAmount(Number(amount || 0))
   const circularLabel = record?.deadline.source.match(/CBN circular [^,;]+/i)?.[0] ?? 'CBN response window'
-  const subject = `URGENT: Failed ${record?.channel.toUpperCase() ?? 'payment'} debit of ${amountText} - Session ID: ${record?.reference || ''} - ${circularLabel}`
+  const subject = `URGENT: Failed ${channel.toUpperCase() || 'payment'} debit of ${amountText} - Session ID: ${reference || ''} - ${circularLabel}`
   const body = complaintText
 
   React.useEffect(() => {
     let mounted = true
-    const load = async () => {
-      try {
-        if (draft.caseId) {
-          const rec = await getCase(draft.caseId)
-          saveCaseId(rec.id)
-          setRecord(rec)
-          setCaseId(draft.caseId)
-          setComplaintText(rec.complaint_text)
-          setToEmail(rec.to_email || suggestedDisputeEmail(rec.bank_name))
-        } else {
-          setLoading(true)
-          const currentConfig = await getConfig()
-          setConfig(currentConfig)
-          const rec = await createCase({
-            problem_type: draft.problemType!,
-            channel: draft.fields.channel,
-            bank_key: draft.fields.bank ? (currentConfig.banks?.find((b: { key: string; name: string }) => b.name.toLowerCase() === draft.fields.bank.toLowerCase())?.key ?? null) : null,
-            bank_name: draft.fields.bank,
-            amount: Number(draft.fields.amount) || 0,
-            txn_date: draft.fields.date,
-            txn_time: draft.fields.time,
-            reference: draft.fields.reference,
-            account_last4: draft.fields.accountLast4 || null,
-            to_email: '',
-          })
-          saveCaseId(rec.id)
-          notify('Complaint drafted and saved to My Cases')
-          setRecord(rec)
-          setCaseId(rec.id)
-          setComplaintText(rec.complaint_text)
-          setToEmail(rec.to_email || suggestedDisputeEmail(rec.bank_name))
-          saveDraft({ caseId: rec.id })
-        }
-      } catch {
-        setApiError("We couldn’t create your case. Please check your details and try again.")
-      } finally {
-        setLoading(false)
-      }
-    }
-    if (mounted) void load()
-    return () => {
-      mounted = false
-    }
-  }, [draft.caseId, draft.problemType, draft.fields])
+    if (!draft.caseId) return () => { mounted = false }
+    void getCase(draft.caseId)
+      .then((rec) => {
+        if (!mounted) return
+        saveCaseId(rec.id)
+        setRecord(rec)
+        setCaseId(rec.id)
+        setComplaintText(rec.complaint_text)
+        setToEmail(rec.to_email || suggestedDisputeEmail(rec.bank_name))
+      })
+      .catch(() => {
+        if (mounted) setApiError("We couldn’t load your saved case. Your review details are still available.")
+      })
+      .finally(() => {
+        if (mounted) setLoading(false)
+      })
+    return () => { mounted = false }
+  }, [draft.caseId])
 
   React.useEffect(() => {
     void getConfig().then((cfg: Config) => setConfig(cfg)).catch(() => setConfig(null))
@@ -135,7 +161,11 @@ export default function Complaint() {
   }, [caseId, isDraftReady])
 
   const saveField = async (field: 'complaint_text' | 'to_email', value: string) => {
-    if (!caseId) return
+    if (!caseId) {
+      if (field === 'complaint_text') setComplaintText(value)
+      else setToEmail(value)
+      return
+    }
     try {
       const updated = await patchCase(caseId, { [field]: value })
       setRecord(updated)
@@ -196,7 +226,7 @@ export default function Complaint() {
   const confirmSentNow = async () => {
     if (!caseId) return
     try {
-      await confirmSent(caseId, null)
+      await patchCase(caseId, { status: 'sent' })
       setReturnBanner(false)
       navigate(`/case/${caseId}`)
     } catch {
@@ -212,7 +242,7 @@ export default function Complaint() {
       return
     }
     try {
-      await confirmSent(caseId, clamped.value)
+      await patchCase(caseId, { status: 'sent', sent_at: clamped.value })
       setReturnBanner(false)
       navigate(`/case/${caseId}`)
     } catch {
@@ -240,22 +270,114 @@ export default function Complaint() {
     navigate('/cases')
   }
 
+  const handleCreateCase = async () => {
+    if (caseId || loading) return
+    setApiError(null)
+    setLoading(true)
+    let caseCreated = false
+    const sanitizedAmount = parseFloat(String(draft.fields.amount).replace(/[^0-9.]/g, '')) || 0
+    const referenceValue = draft.fields.reference.trim()
+    const payload = {
+      problem_type: draft.problemType ?? '',
+      channel: draft.fields.channel,
+      bank_key: draft.fields.bank
+        ? (config?.banks.find((item) => item.name.toLowerCase() === draft.fields.bank.toLowerCase())?.key ?? null)
+        : null,
+      bank_name: draft.fields.bank.trim(),
+      amount: sanitizedAmount,
+      txn_date: formatDateForApi(draft.fields.date),
+      txn_time: formatTimeForApi(draft.fields.time),
+      reference: referenceValue || null,
+      account_last4: draft.fields.accountLast4 || null,
+      to_email: toEmail.trim(),
+    }
+    console.log('Submitting Case Payload:', payload)
+    try {
+      if (!payload.problem_type || !payload.channel || !payload.bank_name || !payload.txn_date || !payload.txn_time || !payload.reference || !payload.amount) {
+        throw new Error('Review the transaction details in the previous steps and try again.')
+      }
+      const created = await createCase(payload)
+      caseCreated = true
+      saveCaseId(created.id)
+      saveDraft({ caseId: created.id })
+      setRecord(created)
+      setCaseId(created.id)
+      setComplaintText(created.complaint_text)
+      setToEmail(created.to_email || suggestedDisputeEmail(created.bank_name))
+      const updated = await patchCase(created.id, {
+        complaint_text: complaintText,
+        to_email: toEmail.trim() || created.to_email,
+      })
+      setRecord(updated)
+      setComplaintText(updated.complaint_text)
+      setToEmail(updated.to_email || suggestedDisputeEmail(updated.bank_name))
+      notify('Complaint drafted and saved to My Cases')
+      if (!updated.to_email) {
+        setApiError('Your case is saved. Add the bank’s dispute email address before sending.')
+        return
+      }
+      try {
+        await mailOpened(updated.id)
+      } catch {
+        setApiError('Your case is saved, but we couldn’t record that the email was opened.')
+      }
+      const links = buildSendLinks(updated.to_email, subject, updated.complaint_text)
+      const mailto = links.mailtoTooLong
+        ? links.mailto.replace(/&body=.*$/, '')
+        : links.mailto
+      if (links.mailtoTooLong) {
+        try {
+          await navigator.clipboard.writeText(updated.complaint_text)
+          setMailCopied(true)
+        } catch {
+          setApiError('The complaint is too long for the email link. Copy it from the review letter.')
+        }
+      }
+      window.location.href = mailto
+    } catch (error) {
+      setApiError(caseCreated
+        ? 'Your case was created, but we couldn’t save the latest letter changes. You can try editing the letter again.'
+        : error instanceof Error && error.message !== 'Failed to fetch'
+          ? error.message
+          : "We couldn’t create your case. Please check your details and try again.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const needsRecovery = !record
+    && !draft.fields.amount.trim()
+    && !draft.fields.bank.trim()
+    && (!draft.caseId || !loading)
+
   return (
     <Layout title={routeTitle('/complaint')} step={{ step: 4, total: 4 }}>
       <ErrorSummary errors={errors} />
-      {apiError && <Banner kind="error" title={apiError} />}
+      {apiError && !needsRecovery && <Banner kind="error" title={apiError} />}
       {mailCopied && (
         <Banner kind="info" title="Complaint copied" body={
           <>The complaint text was copied to your clipboard. Paste it into the email body.</>
         } />
       )}
 
-      {loading ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm" role="status">
-          Creating your case…
-        </div>
-      ) : record ? (
+      {needsRecovery ? (
+        <section className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm sm:p-10">
+          <div className="mx-auto grid size-12 place-items-center rounded-2xl bg-indigo-50 text-indigo-700">
+            <ArrowRight size={22} aria-hidden="true" />
+          </div>
+          <h1 className="mt-4 font-['Plus_Jakarta_Sans'] text-2xl font-bold tracking-tight text-slate-950">No active dispute in progress</h1>
+          <p className="mt-2 text-sm leading-6 text-slate-600">Your review details aren’t available in this browser session. Return to the verification step to start again.</p>
+          <Button className="mt-6" onClick={() => navigate('/check')}>
+            Start New Complaint <ArrowRight size={16} aria-hidden="true" />
+          </Button>
+        </section>
+      ) : (
         <>
+          {loading && (
+            <p className="mb-4 text-sm text-slate-500" role="status">
+              {caseId || draft.caseId ? 'Loading your saved draft…' : 'Saving your case…'}
+            </p>
+          )}
           <div className="mb-7 max-w-2xl">
             <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-indigo-700">Final review</p>
             <h1 className="text-3xl font-semibold tracking-tight text-slate-950">Review and send</h1>
@@ -269,10 +391,10 @@ export default function Complaint() {
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Transaction record</p>
-                <h2 className="mt-1 font-semibold text-slate-950">{record.bank_name}</h2>
+                <h2 className="mt-1 font-semibold text-slate-950">{bankName || 'Bank not provided'}</h2>
               </div>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-mono text-[10px] font-semibold text-slate-600">
-                {record.channel.toUpperCase()}
+                {channel.toUpperCase() || 'CHANNEL'}
               </span>
             </div>
             <dl className="grid gap-px bg-slate-100 sm:grid-cols-2">
@@ -285,12 +407,12 @@ export default function Complaint() {
               <div className="bg-white px-5 py-3.5">
                 <dt className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Date &amp; time</dt>
                 <dd className="mt-1 font-mono text-sm font-medium tracking-tight tabular-nums text-slate-900">
-                  {record.txn_date} · {record.txn_time}
+                  {txnDate || draft.fields.date || '—'} · {txnTime || draft.fields.time || '—'}
                 </dd>
               </div>
               <div className="bg-white px-5 py-3.5 sm:col-span-2">
                 <dt className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Reference</dt>
-                <dd className="mt-1 break-all font-mono text-sm font-medium tracking-tight text-slate-900">{record.reference}</dd>
+                <dd className="mt-1 break-all font-mono text-sm font-medium tracking-tight text-slate-900">{reference || '—'}</dd>
               </div>
             </dl>
           </section>
@@ -298,11 +420,11 @@ export default function Complaint() {
           <section aria-label="Formal complaint letter and dispatch" className="mx-auto max-w-3xl rounded-xl border border-slate-200/80 bg-white p-6 font-['Instrument_Sans'] leading-relaxed shadow-[0_20px_50px_rgba(0,0,0,0.06)] sm:p-12">
             <header className="mb-7 border-b border-slate-200 pb-5">
               <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-indigo-700">Formal dispute letter</p>
-              <h2 className="mt-2 font-['Plus_Jakarta_Sans'] text-xl font-bold tracking-tight text-slate-900">Complaint to {record.bank_name}</h2>
+              <h2 className="mt-2 font-['Plus_Jakarta_Sans'] text-xl font-bold tracking-tight text-slate-900">Complaint to {bankName || 'your bank'}</h2>
               <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
                 <LetterMetadata label="Date" value={new Intl.DateTimeFormat('en-NG', { dateStyle: 'long' }).format(new Date())} />
-                <LetterMetadata label="Customer bank" value={record.bank_name} />
-                <LetterMetadata label="Session ID / RRN" value={record.reference} mono />
+                <LetterMetadata label="Customer bank" value={bankName || '—'} />
+                <LetterMetadata label="Session ID / RRN" value={reference || '—'} mono />
                 <LetterMetadata label="Disputed amount" value={amountText} mono />
               </dl>
             </header>
@@ -347,18 +469,21 @@ export default function Complaint() {
               <Button onClick={() => void copyText(body, 'Complaint text copied to clipboard')}>
                 Copy Text
               </Button>
-              <Button variant="secondary" onClick={() => void copyText(record.reference, 'Session ID copied to clipboard')}>
+              <Button variant="secondary" onClick={() => void copyText(reference, 'Session ID copied to clipboard')}>
                 Copy Session ID
               </Button>
-              <Button onClick={() => void openMail('mailto')}>
-                Open in Email App
-              </Button>
-              <Button variant="secondary" onClick={saveAndTrack}>
-                Save &amp; Track Case
-              </Button>
-              <Button variant="secondary" onClick={() => void openMail('gmail')}>
-                Open Gmail
-              </Button>
+              {!caseId ? (
+                <Button onClick={() => void handleCreateCase()} disabled={loading}>
+                  {loading ? 'Saving case…' : 'Save Case & Send Complaint'}
+                  {!loading && <ArrowRight size={16} aria-hidden="true" />}
+                </Button>
+              ) : (
+                <>
+                  <Button onClick={() => void openMail('mailto')}>Open in Email App</Button>
+                  <Button variant="secondary" onClick={saveAndTrack}>Save &amp; Track Case</Button>
+                  <Button variant="secondary" onClick={() => void openMail('gmail')}>Open Gmail</Button>
+                </>
+              )}
               <Button variant="secondary" onClick={() => void copyText(toEmail || '', 'Bank email copied to clipboard')}>
                 Copy bank email
               </Button>
@@ -406,7 +531,7 @@ export default function Complaint() {
             </div>
           )}
         </>
-      ) : null}
+      )}
     </Layout>
   )
 }

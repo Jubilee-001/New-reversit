@@ -1,7 +1,7 @@
 """Case creation and the state machine.
 
-The only way into `sent` is confirm-sent. Transitions that the brief does not
-allow are rejected with a clear message.
+The only way into `sent` is the confirm_sent transition. Unsupported transitions
+are rejected with a clear message.
 """
 
 from __future__ import annotations
@@ -174,9 +174,9 @@ def bank_reply(case: Case, ticket: str | None = None, note: str | None = None) -
 
 
 def resolve(case: Case) -> Case:
-    if case.status not in {"sent", "bank_replied"}:
+    if case.status not in {"sent", "bank_replied", "escalated"}:
         raise TransitionError(
-            f"Only a sent or replied case can be resolved; this case is {case.status.replace('_', ' ')}."
+            f"Only a sent, replied or escalated case can be resolved; this case is {case.status.replace('_', ' ')}."
         )
     case.status = "resolved"
     case.resolved_at = utcnow()

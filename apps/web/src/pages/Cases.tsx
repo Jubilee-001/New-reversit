@@ -3,9 +3,9 @@ import { ArrowRight, CheckCircle2, Clock3, Search, TriangleAlert } from 'lucide-
 import { Layout } from '@/components/Layout'
 import { Banner } from '@/components/ui/Banner'
 import { routeTitle } from '@/router'
-import { getCase } from '@/lib/api'
+import { ApiError, getCase } from '@/lib/api'
 import type { CaseRecord } from '@/lib/types'
-import { getCaseIds } from '@/lib/storage'
+import { getCaseIds, removeCaseId } from '@/lib/storage'
 import { hoursLeft } from '@/lib/dates'
 import { buildMailto } from '@/lib/mailto'
 import { notify } from '@/lib/toast'
@@ -28,10 +28,21 @@ export default function Cases() {
       try {
         const ids = getCaseIds()
         const results = await Promise.allSettled(ids.map((id) => getCase(id)))
-        const fetched = results.flatMap((result) => result.status === 'fulfilled' ? [result.value] : [])
+        const fetched: CaseRecord[] = []
+        let hasLoadFailure = false
+        results.forEach((result, index) => {
+          if (result.status === 'fulfilled') {
+            fetched.push(result.value)
+          } else if (result.reason instanceof ApiError && result.reason.status === 404) {
+            const missingId = ids[index]
+            if (missingId) removeCaseId(missingId)
+          } else {
+            hasLoadFailure = true
+          }
+        })
         if (mounted) {
           setRecords(fetched.sort((a, b) => b.created_at.localeCompare(a.created_at)))
-          if (results.some((result) => result.status === 'rejected')) {
+          if (hasLoadFailure) {
             setLoadError('Some saved cases could not be loaded. Check your connection and refresh to try again.')
           }
         }

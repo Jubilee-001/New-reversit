@@ -24,7 +24,7 @@ export function saveDraft(draft: Partial<StoredDraft> & { mode?: StoredDraft['mo
       missing: draft.missing ?? existing.missing,
       problemType: draft.problemType ?? existing.problemType,
       caseId: draft.caseId ?? existing.caseId,
-      apiError: draft.apiError ?? existing.apiError ?? null,
+      apiError: 'apiError' in draft ? draft.apiError ?? null : existing.apiError,
     }
     sessionStorage.setItem(DRAFT_KEY, JSON.stringify(next))
   } catch {

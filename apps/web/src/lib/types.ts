@@ -124,6 +124,7 @@ export interface ParseResult {
   channel?: Channel;
   bank?: string;
   reference?: string;
+  session_id?: string;
   error?: string;
   missing?: string[];
 }
