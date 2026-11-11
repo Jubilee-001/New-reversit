@@ -19,8 +19,8 @@
       "dest": "app/main.py"
     },
     {
-      "src": "/(.*)",
-      "dest": "/apps/web/dist/$1"
+      "src": "/((?!api/).*)",
+      "dest": "/apps/web/dist/index.html"
     }
   ]
 }
