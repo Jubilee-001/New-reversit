@@ -9,28 +9,13 @@ import { routeTitle, navigate } from '@/router'
 import { createCase, getCase, patchCase, mailOpened, getConfig } from '@/lib/api'
 import { getDraft, saveDraft } from '@/lib/draft'
 import { buildSendLinks } from '@/lib/mailto'
+import { isKnownDisputeEmail, suggestedDisputeEmail } from '@/lib/bankDispatch'
+import { updateComplaintBankSalutation } from '@/lib/complaint'
 import { clampSentAt } from '@/lib/dates'
 import { saveCaseId } from '@/lib/storage'
 import { notify } from '@/lib/toast'
 import type { CaseRecord, Config } from '@/lib/types'
 import { ArrowRight } from 'lucide-react'
-
-const DISPUTE_EMAILS: Record<string, string> = {
-  gtbank: 'complaints@gtbank.com',
-  'access bank': 'contactcenter@accessbankplc.com',
-  zenith: 'zenithdirect@zenithbank.com',
-  opay: 'support@opay-inc.com',
-  moniepoint: 'support@moniepoint.com',
-  kuda: 'help@kuda.com',
-  'first bank': 'firstcontact@firstbanknigeria.com',
-  uba: 'cfc@ubagroup.com',
-}
-
-function suggestedDisputeEmail(bankName: string): string {
-  const name = bankName.toLowerCase()
-  const entry = Object.entries(DISPUTE_EMAILS).find(([key]) => name.includes(key))
-  return entry?.[1] ?? ''
-}
 
 function formatAmount(amount: number): string {
   return `₦${amount.toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -87,7 +72,9 @@ export default function Complaint() {
   const [record, setRecord] = React.useState<CaseRecord | null>(null)
   const [complaintText, setComplaintText] = React.useState(() => buildReviewLetter(draft.fields, draft.problemType))
   const [toEmail, setToEmail] = React.useState(() => suggestedDisputeEmail(draft.fields.bank))
+  const [toEmailManuallyEdited, setToEmailManuallyEdited] = React.useState(false)
   const [config, setConfig] = React.useState<Config | null>(null)
+  const configRef = React.useRef<Config | null>(null)
   const [errors, setErrors] = React.useState<{ field: string; message: string }[]>([])
   const [apiError, setApiError] = React.useState<string | null>(null)
   const [loading, setLoading] = React.useState(() => Boolean(draft.caseId))
@@ -96,7 +83,7 @@ export default function Complaint() {
   const [mailCopied, setMailCopied] = React.useState(false)
   const [returnBanner, setReturnBanner] = React.useState(false)
 
-  const bankName = record?.bank_name ?? draft.fields.bank
+  const bankName = (record?.bank_name || draft.fields.bank).trim()
   const reference = record?.reference ?? draft.fields.reference
   const channel = record?.channel ?? draft.fields.channel
   const amount = record?.amount ?? (parseFloat(String(draft.fields.amount).replace(/[^0-9.]/g, '')) || 0)
@@ -105,10 +92,12 @@ export default function Complaint() {
   const bank = config?.banks?.find(
     (item) => item.key === record?.bank_key || item.name.toLowerCase() === bankName.toLowerCase(),
   )
+  const suggestedEmail = suggestedDisputeEmail(bankName, config?.banks)
+  const dispatchEmail = toEmailManuallyEdited ? toEmail : suggestedEmail || toEmail
   const amountText = formatAmount(Number(amount || 0))
   const circularLabel = record?.deadline.source.match(/CBN circular [^,;]+/i)?.[0] ?? 'CBN response window'
   const subject = `URGENT: Failed ${channel.toUpperCase() || 'payment'} debit of ${amountText} - Session ID: ${reference || ''} - ${circularLabel}`
-  const body = complaintText
+  const body = updateComplaintBankSalutation(complaintText, bankName)
 
   React.useEffect(() => {
     let mounted = true
@@ -120,7 +109,10 @@ export default function Complaint() {
         setRecord(rec)
         setCaseId(rec.id)
         setComplaintText(rec.complaint_text)
-        setToEmail(rec.to_email || suggestedDisputeEmail(rec.bank_name))
+        setToEmail(rec.to_email || suggestedDisputeEmail(rec.bank_name, configRef.current?.banks))
+        setToEmailManuallyEdited(
+          Boolean(rec.to_email && !isKnownDisputeEmail(rec.to_email, configRef.current?.banks)),
+        )
       })
       .catch(() => {
         if (mounted) setApiError("We couldn’t load your saved case. Your review details are still available.")
@@ -132,7 +124,12 @@ export default function Complaint() {
   }, [draft.caseId])
 
   React.useEffect(() => {
-    void getConfig().then((cfg: Config) => setConfig(cfg)).catch(() => setConfig(null))
+    void getConfig()
+      .then((cfg: Config) => {
+        configRef.current = cfg
+        setConfig(cfg)
+      })
+      .catch(() => setConfig(null))
   }, [])
 
   const isDraftReady = record?.status === 'draft_ready'
@@ -190,7 +187,7 @@ export default function Complaint() {
       setApiError("We couldn’t record that you opened the email. You can still send it yourself.")
     }
 
-    const to = toEmail || (record as CaseRecord).to_email
+    const to = dispatchEmail || (record as CaseRecord).to_email
     if (!to) {
       setApiError('Enter the bank’s dispute email address before sending.')
       return
@@ -289,7 +286,7 @@ export default function Complaint() {
       txn_time: formatTimeForApi(draft.fields.time),
       reference: referenceValue || null,
       account_last4: draft.fields.accountLast4 || null,
-      to_email: toEmail.trim(),
+      to_email: dispatchEmail.trim(),
     }
     console.log('Submitting Case Payload:', payload)
     try {
@@ -303,14 +300,16 @@ export default function Complaint() {
       setRecord(created)
       setCaseId(created.id)
       setComplaintText(created.complaint_text)
-      setToEmail(created.to_email || suggestedDisputeEmail(created.bank_name))
+      setToEmail(created.to_email || suggestedDisputeEmail(created.bank_name, config?.banks))
+      setToEmailManuallyEdited(Boolean(created.to_email && !isKnownDisputeEmail(created.to_email)))
       const updated = await patchCase(created.id, {
-        complaint_text: complaintText,
-        to_email: toEmail.trim() || created.to_email,
+        complaint_text: body,
+        to_email: dispatchEmail.trim() || created.to_email,
       })
       setRecord(updated)
       setComplaintText(updated.complaint_text)
-      setToEmail(updated.to_email || suggestedDisputeEmail(updated.bank_name))
+      setToEmail(updated.to_email || suggestedDisputeEmail(updated.bank_name, config?.banks))
+      setToEmailManuallyEdited(Boolean(updated.to_email && !isKnownDisputeEmail(updated.to_email)))
       notify('Complaint drafted and saved to My Cases')
       if (!updated.to_email) {
         setApiError('Your case is saved. Add the bank’s dispute email address before sending.')
@@ -321,13 +320,13 @@ export default function Complaint() {
       } catch {
         setApiError('Your case is saved, but we couldn’t record that the email was opened.')
       }
-      const links = buildSendLinks(updated.to_email, subject, updated.complaint_text)
+      const links = buildSendLinks(dispatchEmail || updated.to_email, subject, body)
       const mailto = links.mailtoTooLong
         ? links.mailto.replace(/&body=.*$/, '')
         : links.mailto
       if (links.mailtoTooLong) {
         try {
-          await navigator.clipboard.writeText(updated.complaint_text)
+          await navigator.clipboard.writeText(body)
           setMailCopied(true)
         } catch {
           setApiError('The complaint is too long for the email link. Copy it from the review letter.')
@@ -431,8 +430,8 @@ export default function Complaint() {
             <Textarea
               label="Complaint to your bank"
               id="complaint"
-              value={complaintText}
-              onChange={(e) => setComplaintText(e.target.value)}
+              value={body}
+              onChange={(e) => setComplaintText(updateComplaintBankSalutation(e.target.value, bankName))}
               onBlur={(e) => void saveField('complaint_text', e.target.value)}
               error={errors.find((e) => e.field === 'complaint_text')?.message}
               rows={14}
@@ -444,8 +443,13 @@ export default function Complaint() {
                 label="Send to (bank’s dispute email address)"
                 id="to-email"
                 type="email"
-                value={toEmail}
-                onChange={(e) => setToEmail(e.target.value)}
+                value={dispatchEmail}
+                onChange={(e) => {
+                  setToEmail(e.target.value)
+                  setToEmailManuallyEdited(
+                    e.target.value.trim() !== suggestedDisputeEmail(bankName, config?.banks),
+                  )
+                }}
                 onBlur={(e) => void saveField('to_email', e.target.value)}
                 error={errors.find((e) => e.field === 'to_email')?.message}
               />
@@ -484,7 +488,7 @@ export default function Complaint() {
                   <Button variant="secondary" onClick={() => void openMail('gmail')}>Open Gmail</Button>
                 </>
               )}
-              <Button variant="secondary" onClick={() => void copyText(toEmail || '', 'Bank email copied to clipboard')}>
+              <Button variant="secondary" onClick={() => void copyText(dispatchEmail || '', 'Bank email copied to clipboard')}>
                 Copy bank email
               </Button>
               <Button variant="secondary" onClick={handlePrint}>

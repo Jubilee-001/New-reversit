@@ -2,6 +2,8 @@ import math
 import re
 from datetime import datetime
 
+from reference_rules import extract_reference_candidates
+
 
 KNOWN_BANKS = {
     "access": "Access Bank",
@@ -36,7 +38,7 @@ _OUTGOING_PATTERN = re.compile(
     r"transfer\s+sent|transfer\s+to\s+(?:bank|account)|sent\s+to)\b",
     re.IGNORECASE,
 )
-_RECEIPT_PATTERN = re.compile(r"\btransaction\s+receipt\b", re.IGNORECASE)
+_RECEIPT_PATTERN = re.compile(r"\b(?:transaction\s+)?receipt\b", re.IGNORECASE)
 _CURRENCY = r"(?:ngn|₦|(?<![A-Za-z])n(?![A-Za-z]))"
 _DEBIT_AMOUNT_PATTERN = re.compile(
     r"\b(?:amt|amount|debit|dr|debited|spent|paid)\s*:?\s*"
@@ -136,6 +138,26 @@ def _parse_channel(text: str) -> str | None:
 
 
 def _parse_bank(text: str) -> str:
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        match = re.match(
+            r"\s*(?:receiving\s+bank|bank)\s*:?\s*(.*)",
+            line,
+            re.IGNORECASE,
+        )
+        if not match:
+            continue
+        bank_text = match.group(1).strip()
+        if not bank_text and index + 1 < len(lines):
+            bank_text = lines[index + 1].strip()
+        for keyword in sorted(KNOWN_BANKS, key=len, reverse=True):
+            if re.search(
+                rf"(?<![A-Za-z0-9]){re.escape(keyword)}(?![A-Za-z0-9])",
+                bank_text,
+                re.IGNORECASE,
+            ):
+                return KNOWN_BANKS[keyword]
+
     first_line = text.splitlines()[0] if text.splitlines() else ""
     for keyword in sorted(KNOWN_BANKS, key=len, reverse=True):
         if re.search(rf"(?<![A-Za-z0-9]){re.escape(keyword)}(?![A-Za-z0-9])", first_line, re.IGNORECASE):
@@ -147,16 +169,8 @@ def _parse_bank(text: str) -> str:
 
 
 def _parse_reference(text: str) -> str | None:
-    match = re.search(
-        r"\b(?:transaction\s*id|trans\s*id|reference|ref|id)\b"
-        r"\s*:?\s*([A-Za-z0-9][A-Za-z0-9-]*)",
-        text,
-        re.IGNORECASE,
-    )
-    if match:
-        return match.group(1)
-    match = re.search(r"\b([A-Za-z0-9]{6,})\b\s*[.!]?\s*$", text)
-    return match.group(1) if match else None
+    candidates = extract_reference_candidates(text)
+    return candidates[0] if candidates else None
 
 
 def parse_with_regex(text: str) -> dict | None:

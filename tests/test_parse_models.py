@@ -22,7 +22,7 @@ def test_text_parsing_uses_text_model_and_supported_completion_parameters():
                 "time": "10:00",
                 "channel": "pos",
                 "bank": "GTBank",
-                "reference": "REF123456",
+                "reference": "REF1234567",
             })
         ),
     ]
@@ -35,7 +35,7 @@ def test_text_parsing_uses_text_model_and_supported_completion_parameters():
     ):
         result = parse.parse_with_llm("synthetic transaction alert")
 
-    assert result["reference"] == "REF123456"
+    assert result["reference"] == "REF1234567"
     kwargs = client.chat.completions.create.call_args.kwargs
     assert kwargs["model"] == "qwen/qwen3.8-27b"
     assert [call.kwargs["model"] for call in client.chat.completions.create.call_args_list] == [
@@ -51,7 +51,7 @@ def test_text_parser_falls_back_when_configured_model_is_missing():
     client = Mock()
     client.chat.completions.create.side_effect = [
         Exception("model not found"),
-        _completion('{"amount": 1000, "date": "2026-10-12", "time": "10:00", "channel": "pos", "bank": "GTBank", "reference": "REF123456"}'),
+        _completion('{"amount": 1000, "date": "2026-10-12", "time": "10:00", "channel": "pos", "bank": "GTBank", "reference": "REF1234567"}'),
     ]
 
     with (
@@ -61,7 +61,7 @@ def test_text_parser_falls_back_when_configured_model_is_missing():
     ):
         result = parse.parse_with_llm("synthetic transaction alert")
 
-    assert result["reference"] == "REF123456"
+    assert result["reference"] == "REF1234567"
     assert [call.kwargs["model"] for call in client.chat.completions.create.call_args_list] == [
         "retired/model",
         "qwen/qwen3.8-27b",

@@ -19,6 +19,12 @@ from datetime import datetime
 from dotenv import load_dotenv
 from groq import Groq
 
+from reference_rules import (
+    NIGERIAN_REFERENCE_INSTRUCTION,
+    extract_reference_candidates,
+    is_valid_reference,
+)
+
 load_dotenv()
 
 # ---------------------------------------------------------------------
@@ -168,6 +174,7 @@ except ModuleNotFoundError:  # image_input.py not in the folder
 SYSTEM_PROMPT = """You are an expert Nigerian bank transaction parser.
 Extract the transaction details from the alert text and return ONLY a valid JSON object.
 Allowed channels: "atm", "pos", "transfer", "web".
+""" + NIGERIAN_REFERENCE_INSTRUCTION + """
 
 JSON schema:
 {
@@ -255,7 +262,7 @@ def parse_with_llm(text: str) -> dict | None:
 # ---------------------------------------------------------------------
 # Task 4: Strict validation
 # ---------------------------------------------------------------------
-def validate_extracted_data(data) -> tuple[bool, list[str]]:
+def validate_extracted_data(data, text: str | None = None) -> tuple[bool, list[str]]:
     """
     Validate and normalize `data` IN PLACE.
     Returns (is_valid, missing) where `missing` contains only field names
@@ -292,7 +299,15 @@ def validate_extracted_data(data) -> tuple[bool, list[str]]:
         data["channel"] = channel
 
     reference = str(data.get("reference") or "").strip()
-    if reference.lower() in EMPTY_MARKERS:
+    short_labeled_reference = (
+        text is not None
+        and reference in extract_reference_candidates(text)
+        and is_valid_reference(reference, minimum_length=6)
+    )
+    if reference.lower() in EMPTY_MARKERS or not (
+        is_valid_reference(reference) or short_labeled_reference
+    ):
+        data["reference"] = None
         missing.append("reference")
     else:
         data["reference"] = reference
@@ -322,11 +337,11 @@ def _warning_codes(text: str) -> list[dict[str, str]]:
             "message": "Multiple amounts were found; the final value was selected from the debit line.",
         })
 
-    refs = re.findall(r"\b(?:ref(?:erence)?|session\s*id|rrn|stan|transaction\s*id|trans\s*id)\s*[:=]?\s*([A-Za-z0-9][A-Za-z0-9\-/]*)", text, re.IGNORECASE)
+    refs = extract_reference_candidates(text)
     if len(refs) > 1:
         warnings.append({
             "code": "multiple_references",
-            "message": f"Multiple references were present; {refs[-1]} was chosen.",
+            "message": f"Multiple references were present; {refs[0]} was chosen.",
         })
 
     if re.search(r"\b\d{1,2}\b.*\b\d{1,2}\b", text) and re.search(r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b", text, re.IGNORECASE):
@@ -390,7 +405,11 @@ def ungrounded_fields(data: dict, text: str) -> list[str]:
     bad = []
     flat = re.sub(r"\s+", "", text)
     ref = re.sub(r"\s+", "", str(data.get("reference", "")))
-    if not ref or ref not in flat:
+    if (
+        not ref
+        or ref not in flat
+        or data.get("reference") not in extract_reference_candidates(text)
+    ):
         bad.append("reference")
 
     plain = text.replace(",", "")
@@ -459,7 +478,7 @@ def parse_alert_result(text: str) -> dict:
             regex_result = None
 
         if isinstance(regex_result, dict):
-            ok, missing = validate_extracted_data(regex_result)
+            ok, missing = validate_extracted_data(regex_result, clean_text)
             if ok and regex_result.get("bank") != DEFAULT_BANK:
                 fields = {
                     "amount": regex_result["amount"],
@@ -485,7 +504,7 @@ def parse_alert_result(text: str) -> dict:
         if isinstance(llm_result, dict) and "_ai_error_reason" in llm_result:
             if isinstance(regex_result, dict):
                 partial = dict(regex_result)
-                validate_extracted_data(partial)
+                validate_extracted_data(partial, clean_text)
                 fields = {
                     field: partial[field]
                     for field in REQUIRED_FIELDS
@@ -535,7 +554,7 @@ def parse_alert_result(text: str) -> dict:
                 "error": "could_not_parse",
             }
 
-        ok, missing = validate_extracted_data(llm_result)
+        ok, missing = validate_extracted_data(llm_result, clean_text)
         if ok:
             grounded = ungrounded_fields(llm_result, clean_text)
             amount_guard = _balance_or_fee_guard(clean_text, llm_result.get("amount"))

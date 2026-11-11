@@ -3,7 +3,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from image_input import extract_text_from_image
+from image_input import VISION_SYSTEM_PROMPT, extract_text_from_image
 
 
 @pytest.mark.parametrize(
@@ -31,3 +31,12 @@ def test_image_extraction_uses_image_model_only(tmp_path, image_model, expected_
         assert extract_text_from_image(str(image_path)) == "Debit alert"
 
     assert client.chat.completions.create.call_args.kwargs["model"] == expected_model
+    messages = client.chat.completions.create.call_args.kwargs["messages"]
+    assert messages[0]["role"] == "system"
+    assert messages[0]["content"] == (
+        "Identify the unique transaction identifier. On Nigerian receipts, this may be labeled "
+        "'Transaction ID', 'Trans ID', 'Session ID', 'RRN', or 'Reference'. It is typically a "
+        "12-digit RRN, a 30-digit NIP Session ID, or a distinct alphanumeric transaction code. "
+        "DO NOT confuse phone numbers, account numbers, or timestamps with the reference."
+    )
+    assert messages[0]["content"] == VISION_SYSTEM_PROMPT

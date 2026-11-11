@@ -14,6 +14,8 @@ import re
 from dotenv import load_dotenv
 from groq import Groq
 
+from reference_rules import NIGERIAN_REFERENCE_INSTRUCTION
+
 load_dotenv()
 
 # Groq free tier caps OUTPUT tokens per minute (1000 for this model), and a
@@ -31,6 +33,7 @@ OCR_PROMPT = (
     "character for character. Do not summarize, correct, translate or add "
     "anything. If there is no readable text, reply with exactly: NO_TEXT"
 )
+VISION_SYSTEM_PROMPT = NIGERIAN_REFERENCE_INSTRUCTION
 
 
 def _client():
@@ -70,13 +73,16 @@ def extract_text_from_image(image_path: str) -> str | None:
 
         completion = client.chat.completions.create(
             model=os.getenv("GROQ_IMAGE_MODEL") or "qwen/qwen3.8-27b",
-            messages=[{
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": OCR_PROMPT},
-                    {"type": "image_url", "image_url": {"url": data_url}},
-                ],
-            }],
+            messages=[
+                {"role": "system", "content": VISION_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": OCR_PROMPT},
+                        {"type": "image_url", "image_url": {"url": data_url}},
+                    ],
+                },
+            ],
             temperature=0.7,
             top_p=0.8,
             max_completion_tokens=IMAGE_MAX_TOKENS,

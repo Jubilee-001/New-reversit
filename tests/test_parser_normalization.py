@@ -24,7 +24,7 @@ def test_parse_alert_returns_normalized_llm_fields():
         "time": "08:08 PM",
         "channel": "pos",
         "bank": "Example Bank",
-        "reference": "REF93000",
+        "reference": "REF9300000",
     }
 
     with (
@@ -32,7 +32,7 @@ def test_parse_alert_returns_normalized_llm_fields():
         patch("parse.parse_with_llm", return_value=extracted),
     ):
         result = parse.parse_alert(
-            "Debit ₦93,000 via POS on May 12th, 2025 at 08:08 PM. Ref: REF93000"
+            "Debit ₦93,000 via POS on May 12th, 2025 at 08:08 PM. Ref: REF9300000"
         )
 
     assert result == {
@@ -41,7 +41,7 @@ def test_parse_alert_returns_normalized_llm_fields():
         "time": "20:08",
         "channel": "pos",
         "bank": "Example Bank",
-        "reference": "REF93000",
+        "reference": "REF9300000",
     }
 
 
@@ -52,13 +52,13 @@ def test_parse_screenshot_returns_normalized_fields():
         "time": "08:08 PM",
         "channel": "pos",
         "bank": "Example Bank",
-        "reference": "REF93000",
+        "reference": "REF9300000",
     }
 
     with (
         patch(
             "parse.extract_text_from_image",
-            return_value="Debit ₦93,000 via POS on May 12th, 2025 at 08:08 PM. Ref: REF93000",
+            return_value="Debit ₦93,000 via POS on May 12th, 2025 at 08:08 PM. Ref: REF9300000",
         ),
         patch("parse.parse_with_regex", return_value=None),
         patch("parse.parse_with_llm", return_value=extracted),
@@ -71,7 +71,7 @@ def test_parse_screenshot_returns_normalized_fields():
         "time": "20:08",
         "channel": "pos",
         "bank": "Example Bank",
-        "reference": "REF93000",
+        "reference": "REF9300000",
     }
 
 

@@ -358,6 +358,59 @@ def test_parse_text_preserves_partial_transaction_reference():
     assert response.json()["missing"] == ["date", "time"]
 
 
+def test_parse_text_handles_multiline_gtbank_receipt():
+    receipt = """Receipt
+20 Jun 2025, 17:03, GMT+01:00
+GTCO
+₦ 5,000.00
+Five Thousand Naira Zero Kobo
+Success
+Sender
+Bello Olade Shifau
+Receiver
+Jegede Roland, Adebowale
+Account number
+0015833384
+Receiving bank
+Gtbank
+Reference number
+M03542720
+Remark
+Transfer Between Customers via GTWorld Balance of co REF: M03542720 from Bello Olade Shifau to Jegede Roland, Adebowale"""
+
+    response = client.post("/api/parse-text", json={"text": receipt})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "amount": 5000.0,
+        "date": "2025-06-20",
+        "time": "17:03",
+        "channel": "transfer",
+        "bank": "GTBank",
+        "reference": "M03542720",
+    }
+
+
+def test_created_complaint_letter_uses_detected_bank_name():
+    response = client.post(
+        "/api/cases",
+        json={
+            "problem_type": "failed_transfer",
+            "channel": "transfer",
+            "bank_name": "Zenith Bank",
+            "amount": 5000,
+            "txn_date": "2025-06-20",
+            "txn_time": "17:03",
+            "reference": "M03542720",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["bank_name"] == "Zenith Bank"
+    assert response.json()["complaint_text"].startswith("Dear Zenith Bank,")
+    assert "Dear GTBank," not in response.json()["complaint_text"]
+
+
 def test_parse_text_empty():
     resp = client.post("/api/parse-text", json={"text": ""})
     assert resp.status_code == 200
