@@ -81,6 +81,13 @@ def _to_amount(raw: str) -> float | None:
 
 
 def _parse_date(text: str) -> str | None:
+    text = re.sub(r"(?<=\d)(?:st|nd|rd|th)\b", "", text, flags=re.IGNORECASE)
+    text = re.sub(
+        r"\b(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s+",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
     patterns = (
         (r"\b(\d{4}-\d{1,2}-\d{1,2})\b", ("%Y-%m-%d",)),
         (
@@ -97,14 +104,20 @@ def _parse_date(text: str) -> str | None:
             r"[a-z]*\s+\d{4})\b",
             ("%d %b %Y", "%d %B %Y"),
         ),
+        (
+            r"\b((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)"
+            r"[a-z]*\s+\d{1,2},?\s+\d{4})\b",
+            ("%b %d %Y", "%B %d %Y"),
+        ),
     )
     for pattern, formats in patterns:
         match = re.search(pattern, text, re.IGNORECASE)
         if not match:
             continue
+        date_value = match.group(1).replace(",", "")
         for date_format in formats:
             try:
-                return datetime.strptime(match.group(1), date_format).strftime("%Y-%m-%d")
+                return datetime.strptime(date_value, date_format).strftime("%Y-%m-%d")
             except ValueError:
                 continue
         return None

@@ -98,6 +98,12 @@ _DATE_FORMATS = (
 def normalize_date(raw) -> str | None:
     """Return YYYY-MM-DD or None if the value is not a recognizable date."""
     raw = re.sub(r"(?<=\d)(?:st|nd|rd|th)\b", "", str(raw).strip(), flags=re.IGNORECASE)
+    raw = re.sub(
+        r"^(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s+",
+        "",
+        raw,
+        flags=re.IGNORECASE,
+    )
     raw = raw.replace(",", "")
     for fmt in _DATE_FORMATS:
         try:

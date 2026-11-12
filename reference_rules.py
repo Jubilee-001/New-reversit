@@ -20,7 +20,11 @@ REFERENCE_PATTERN = re.compile(
     re.IGNORECASE,
 )
 NIP_SESSION_PATTERN = re.compile(r"\b\d{30}\b")
-_REFERENCE_TOKEN_PATTERN = re.compile(r"\+?[A-Za-z0-9][A-Za-z0-9_-]*")
+_REFERENCE_TOKEN_PATTERN = re.compile(
+    r"[A-Za-z0-9][A-Za-z0-9_-]*"
+    r"(?:\|(?:[ \t]*\r?\n[ \t]*)?[A-Za-z0-9][A-Za-z0-9_-]*)*"
+    r"\|?"
+)
 _PHONE_NUMBER_PATTERN = re.compile(r"(?:070|080|081|090|091)\d{8}")
 _INTERNATIONAL_NIGERIAN_PHONE_PATTERN = re.compile(r"\+?234\d{10}")
 _DATE_OR_TIMESTAMP_PATTERN = re.compile(
@@ -31,12 +35,17 @@ _DATE_OR_TIMESTAMP_PATTERN = re.compile(
 def is_valid_reference(value: str, *, minimum_length: int = 10) -> bool:
     """Return whether a candidate has a plausible transaction-reference shape."""
     candidate = value.strip()
-    if not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9_-]*[A-Za-z0-9])", candidate):
+    parts = candidate.split("|")
+    if not all(
+        re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9_-]*[A-Za-z0-9])?", part)
+        for part in parts
+    ):
         return False
-    if not minimum_length <= len(candidate) <= 36:
+    maximum_length = 55 if len(parts) > 1 else 36
+    if not minimum_length <= len(candidate) <= maximum_length:
         return False
 
-    compact = re.sub(r"[-_]", "", candidate)
+    compact = re.sub(r"[-_|]", "", candidate)
     if re.fullmatch(r"(?:NGN|N)\d+(?:\.\d{1,2})?", candidate, re.IGNORECASE):
         return False
     if _DATE_OR_TIMESTAMP_PATTERN.fullmatch(compact):
@@ -66,7 +75,7 @@ def extract_reference_candidates(text: str) -> list[str]:
         token = _REFERENCE_TOKEN_PATTERN.match(remainder.lstrip())
         if not token:
             continue
-        candidate = token.group()
+        candidate = re.sub(r"\|[ \t]*\r?\n[ \t]*", "|", token.group())
 
         if label == "nip session id":
             valid = bool(re.fullmatch(r"\d{30}", candidate)) and is_valid_reference(candidate)

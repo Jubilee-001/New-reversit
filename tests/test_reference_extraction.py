@@ -118,6 +118,49 @@ def test_reference_label_can_be_separated_from_value_by_newline():
     assert result["reference"] == "REF123456"
 
 
+def test_extracts_full_wrapped_moniepoint_reference_with_pipes():
+    receipt = """Moniepoint
+MICROFINANCE BANK
+DEBIT
+₦7,400.00
+Transaction Date
+Tuesday, October 27th, 2026 | 12:45 PM
+Transaction Reference
+CDS-27102026114154|2FBMQ979|740000|
+124150_DEBIT_0"""
+
+    result = parse_with_regex(receipt)
+
+    assert result is not None
+    assert result["reference"] == "CDS-27102026114154|2FBMQ979|740000|124150_DEBIT_0"
+    assert len(result["reference"]) == 49
+    assert result["date"] == "2026-10-27"
+    assert result["time"] == "12:45"
+    assert result["amount"] == 7400.0
+    assert result["bank"] == "Moniepoint"
+
+
+def test_extracts_shorter_pipe_delimited_moniepoint_reference():
+    result = parse_with_regex(
+        "Moniepoint DEBIT ₦1,000.00 Transaction Reference: "
+        "TRF|2MPTqoc89|2116605855171567616"
+    )
+
+    assert result is not None
+    assert result["reference"] == "TRF|2MPTqoc89|2116605855171567616"
+
+
+def test_pipe_delimited_reference_supports_up_to_55_characters():
+    maximum_reference = f"{'A' * 27}|{'B' * 27}"
+    oversized_reference = f"{maximum_reference}C"
+
+    accepted = parse_with_regex(f"DEBIT ₦1,000. Transaction Reference: {maximum_reference}")
+    rejected = parse_with_regex(f"DEBIT ₦1,000. Transaction Reference: {oversized_reference}")
+
+    assert accepted is not None and accepted["reference"] == maximum_reference
+    assert rejected is not None and rejected["reference"] is None
+
+
 @pytest.mark.parametrize(
     "reference",
     ["07012345678", "+2348012345678", "2016439805", "20250512", "93000"],

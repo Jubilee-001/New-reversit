@@ -14,6 +14,7 @@ def test_normalize_time_handles_seconds_and_meridiem():
 def test_normalize_date_handles_ordinal_month_first_date():
     assert parse.normalize_date("May 12th, 2025") == "2025-05-12"
     assert parse.normalize_date("12th May, 2025") == "2025-05-12"
+    assert parse.normalize_date("Tuesday, October 27th, 2026") == "2026-10-27"
     assert parse.normalize_date("05/12/2025") == "2025-05-12"
 
 
@@ -114,3 +115,25 @@ To report
     assert "reference" not in parsed["missing"]
     assert "date" in parsed["missing"]
     assert "time" in parsed["missing"]
+
+
+def test_moniepoint_receipt_keeps_wrapped_reference_and_ordinal_date():
+    receipt = """Moniepoint
+MICROFINANCE BANK
+DEBIT
+₦7,400.00
+Transaction Date
+Tuesday, October 27th, 2026 | 12:45 PM
+Transaction Reference
+CDS-27102026114154|2FBMQ979|740000|
+124150_DEBIT_0"""
+
+    with patch("parse.parse_with_llm", return_value={"_ai_error_reason": "ai_unavailable"}):
+        parsed = parse.parse_alert_result(receipt)
+
+    assert parsed["source"] == "pattern"
+    assert parsed["amount"] == 7400.0
+    assert parsed["date"] == "2026-10-27"
+    assert parsed["time"] == "12:45"
+    assert parsed["reference"] == "CDS-27102026114154|2FBMQ979|740000|124150_DEBIT_0"
+    assert "reference" not in parsed["missing"]
