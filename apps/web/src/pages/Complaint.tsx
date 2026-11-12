@@ -10,6 +10,7 @@ import { createCase, getCase, patchCase, mailOpened, getConfig } from '@/lib/api
 import { getDraft, saveDraft } from '@/lib/draft'
 import { buildSendLinks } from '@/lib/mailto'
 import { isKnownDisputeEmail, suggestedDisputeEmail } from '@/lib/bankDispatch'
+import { resolveBank } from '@/lib/bankAssets'
 import { updateComplaintBankSalutation } from '@/lib/complaint'
 import { clampSentAt } from '@/lib/dates'
 import { saveCaseId } from '@/lib/storage'
@@ -92,6 +93,7 @@ export default function Complaint() {
   const bank = config?.banks?.find(
     (item) => item.key === record?.bank_key || item.name.toLowerCase() === bankName.toLowerCase(),
   )
+  const resolvedBank = resolveBank(bankName, record?.bank_key ?? bank?.key)
   const suggestedEmail = suggestedDisputeEmail(bankName, config?.banks)
   const dispatchEmail = toEmailManuallyEdited ? toEmail : suggestedEmail || toEmail
   const amountText = formatAmount(Number(amount || 0))
@@ -418,11 +420,31 @@ export default function Complaint() {
 
           <section aria-label="Formal complaint letter and dispatch" className="mx-auto max-w-3xl rounded-xl border border-slate-200/80 bg-white p-6 font-['Instrument_Sans'] leading-relaxed shadow-[0_20px_50px_rgba(0,0,0,0.06)] sm:p-12">
             <header className="mb-7 border-b border-slate-200 pb-5">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-indigo-700">Formal dispute letter</p>
-              <h2 className="mt-2 font-['Plus_Jakarta_Sans'] text-xl font-bold tracking-tight text-slate-900">Complaint to {bankName || 'your bank'}</h2>
+              <div className="flex items-center gap-4">
+                {resolvedBank.logo && (
+                  <img
+                    src={resolvedBank.logo}
+                    alt={`${resolvedBank.fullName} logo`}
+                    className="h-14 w-20 shrink-0 object-contain"
+                    referrerPolicy="no-referrer"
+                    onError={(event) => {
+                      event.currentTarget.hidden = true
+                    }}
+                  />
+                )}
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-indigo-700">Formal dispute letter</p>
+                  {resolvedBank.fullName !== 'Commercial Bank / Dispute Desk' && (
+                    <p className="mt-1 font-['Plus_Jakarta_Sans'] text-sm font-semibold text-slate-700">
+                      {resolvedBank.fullName}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <h2 className="mt-2 font-['Plus_Jakarta_Sans'] text-xl font-bold tracking-tight text-slate-900">Complaint to {bankName ? resolvedBank.shortName : 'your bank'}</h2>
               <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
                 <LetterMetadata label="Date" value={new Intl.DateTimeFormat('en-NG', { dateStyle: 'long' }).format(new Date())} />
-                <LetterMetadata label="Customer bank" value={bankName || '—'} />
+                <LetterMetadata label="Customer bank" value={bankName ? resolvedBank.fullName : '—'} />
                 <LetterMetadata label="Session ID / RRN" value={reference || '—'} mono />
                 <LetterMetadata label="Disputed amount" value={amountText} mono />
               </dl>

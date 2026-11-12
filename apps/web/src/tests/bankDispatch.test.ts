@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { isKnownDisputeEmail, suggestedDisputeEmail } from '@/lib/bankDispatch'
+import { BANK_DIRECTORY, resolveBank } from '@/lib/bankAssets'
 import { updateComplaintBankSalutation } from '@/lib/complaint'
 
 describe('dynamic bank complaint details', () => {
@@ -24,5 +25,30 @@ describe('dynamic bank complaint details', () => {
     )
 
     expect(letter).toBe('Dear Zenith Bank,\n\nI am disputing this debit.')
+  })
+
+  it('resolves detected bank aliases to their logo and official legal name', () => {
+    expect(resolveBank('GTCO')).toEqual(BANK_DIRECTORY.gtco)
+    expect(resolveBank('zEnItH bAnK')).toMatchObject({
+      fullName: 'Zenith Bank Plc',
+      shortName: 'Zenith Bank',
+      logo: '/bank-logos/zenith.png',
+    })
+  })
+
+  it('returns no asset for an unregistered bank', () => {
+    expect(resolveBank('Example Bank')).toMatchObject({
+      fullName: 'Example Bank',
+      shortName: 'Example Bank',
+      logo: null,
+    })
+  })
+
+  it('uses the fallback when the bank is missing', () => {
+    expect(resolveBank('')).toMatchObject({
+      fullName: 'Commercial Bank / Dispute Desk',
+      shortName: 'Your Bank',
+      logo: null,
+    })
   })
 })
